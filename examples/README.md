@@ -75,32 +75,161 @@ This allows your app to communicate with OIB services using internal hostnames:
 
 ### Python Flask (`python-flask/`)
 
-A fully instrumented Flask application with:
-- **Logs**: Sent via stdout (collected by Alloy)
-- **Metrics**: Exposed on `/metrics` endpoint
-- **Traces**: Sent via OpenTelemetry to Tempo
+A fully instrumented Flask application demonstrating all three pillars of observability.
 
+**Features:**
+- **Logs**: Structured JSON logging via Python's logging module (collected by Alloy)
+- **Metrics**: Prometheus metrics exposed on `/metrics` endpoint
+- **Traces**: OpenTelemetry auto-instrumentation with trace context in logs
+
+**Endpoints:**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Home page - returns welcome message |
+| `GET /api/data` | Simulates processing with random delay (50-500ms) |
+| `GET /api/error` | Triggers an intentional error for testing |
+| `GET /metrics` | Prometheus metrics endpoint |
+| `GET /health` | Health check endpoint |
+
+**Run:**
 ```bash
 cd python-flask
 docker compose up -d
-# Visit http://localhost:5001
+# App available at http://localhost:5000
 ```
+
+**Key Files:**
+- `app.py` - Main application with OTEL instrumentation
+- `docker-compose.yml` - Container configuration with OIB network
+- `requirements.txt` - Python dependencies
+
+**Dependencies:**
+```
+flask
+opentelemetry-distro
+opentelemetry-exporter-otlp
+opentelemetry-instrumentation-flask
+prometheus-client
+```
+
+---
 
 ### Node.js Express (`node-express/`)
 
-A fully instrumented Express application with:
-- **Logs**: Sent via pino (collected by Alloy)
-- **Metrics**: Exposed on `/metrics` endpoint via prom-client
-- **Traces**: Sent via OpenTelemetry to Tempo
+A fully instrumented Express application with proper OpenTelemetry setup.
 
+**Features:**
+- **Logs**: Structured JSON logging via Pino with trace context injection
+- **Metrics**: Prometheus metrics via `prom-client` library
+- **Traces**: OpenTelemetry auto-instrumentation for Express, HTTP, and more
+
+**Endpoints:**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Home page - returns welcome message |
+| `GET /api/data` | Simulates processing with random delay (50-500ms) |
+| `GET /api/error` | Triggers an intentional error for testing |
+| `GET /metrics` | Prometheus metrics endpoint |
+| `GET /health` | Health check endpoint |
+
+**Run:**
 ```bash
 cd node-express
 docker compose up -d
-# Visit http://localhost:3003
+# App available at http://localhost:3003
 ```
 
-Both examples demonstrate:
-- Automatic trace context propagation
-- Custom spans and attributes
-- Error tracking
-- Request duration metrics
+**Key Files:**
+- `tracing.js` - OpenTelemetry setup (loaded via `--require` flag)
+- `app.js` - Main Express application
+- `docker-compose.yml` - Container configuration with OIB network
+- `package.json` - Node.js dependencies and scripts
+
+**Dependencies:**
+```json
+{
+  "express": "^4.18.2",
+  "prom-client": "^15.1.0",
+  "pino": "^8.17.2",
+  "@grpc/grpc-js": "^1.9.13",
+  "@opentelemetry/api": "^1.7.0",
+  "@opentelemetry/sdk-node": "^0.45.1",
+  "@opentelemetry/auto-instrumentations-node": "^0.40.1",
+  "@opentelemetry/exporter-trace-otlp-grpc": "^0.45.1"
+}
+```
+
+**Important: OTEL Instrumentation Loading**
+
+Node.js OpenTelemetry auto-instrumentation **must be loaded before any other modules**. This is achieved using the `--require` flag:
+
+```json
+{
+  "scripts": {
+    "start": "node --require ./tracing.js app.js"
+  }
+}
+```
+
+The `tracing.js` file sets up the OpenTelemetry SDK before Express or any other instrumented module is imported.
+
+**gRPC Exporter Configuration:**
+
+When connecting to Alloy's OTLP receiver (which uses plaintext), you must disable TLS:
+
+```javascript
+const grpc = require('@grpc/grpc-js');
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: `http://${otelEndpoint}`,
+    credentials: grpc.credentials.createInsecure(),
+  }),
+  // ...
+});
+```
+
+---
+
+## What Both Examples Demonstrate
+
+- ✅ Automatic trace context propagation
+- ✅ Trace IDs injected into log messages
+- ✅ Custom spans and attributes
+- ✅ Error tracking with stack traces
+- ✅ Request duration metrics
+- ✅ Trace-to-log correlation in Grafana
+
+## Viewing in Grafana
+
+1. **Logs**: Explore → Loki → `{service_name="example-flask-app"}` or `{service_name="example-express-app"}`
+2. **Traces**: Explore → Tempo → Search by service name
+3. **Trace-to-Log**: Click a trace in Tempo → "Logs for this span" to see correlated logs
+4. **Metrics**: Explore → Prometheus → Query app metrics
+
+## Environment Variables
+
+Both examples use these environment variables (set in docker-compose.yml):
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Alloy OTLP gRPC endpoint | `oib-alloy-telemetry:4317` |
+| `OTEL_SERVICE_NAME` | Service name for traces | `example-flask-app` |
+
+## Generating Test Traffic
+
+```bash
+# Generate traffic to Flask app
+for i in {1..10}; do
+  curl -s http://localhost:5000/
+  curl -s http://localhost:5000/api/data
+  curl -s http://localhost:5000/api/error 2>/dev/null
+done
+
+# Generate traffic to Express app
+for i in {1..10}; do
+  curl -s http://localhost:3003/
+  curl -s http://localhost:3003/api/data
+  curl -s http://localhost:3003/api/error 2>/dev/null
+done
+```
