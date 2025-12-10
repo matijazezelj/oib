@@ -1,0 +1,123 @@
+// Grafana Alloy configuration for Docker container log collection
+// This config discovers Docker containers and sends logs to Loki
+
+// ==================== Discovery ====================
+
+// Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+// Relabel discovered targets
+discovery.relabel "docker" {
+  targets = discovery.docker.containers.targets
+
+  // Keep only running containers
+  rule {
+    source_labels = ["__meta_docker_container_id"]
+    target_label  = "container_id"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container_name"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+
+  // Set the log path
+  rule {
+    source_labels = ["__meta_docker_container_id"]
+    target_label  = "__path__"
+    replacement   = "/var/lib/docker/containers/$1/$1-json.log"
+  }
+}
+
+// ==================== Log Collection ====================
+
+// Collect logs from Docker containers
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker.output
+  forward_to = [loki.process.docker.receiver]
+  
+  refresh_interval = "5s"
+}
+
+// Process logs (parse JSON, add labels)
+loki.process "docker" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Parse Docker JSON log format
+  stage.json {
+    expressions = {
+      log    = "log",
+      stream = "stream",
+      time   = "time",
+    }
+  }
+
+  // Set the log line to the actual log content
+  stage.output {
+    source = "log"
+  }
+
+  // Add stream label (stdout/stderr)
+  stage.labels {
+    values = {
+      stream = "",
+    }
+  }
+
+  // Parse timestamp
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339Nano"
+  }
+
+  // Add static labels
+  stage.static_labels {
+    values = {
+      job = "docker",
+    }
+  }
+}
+
+// ==================== Output ====================
+
+// Send logs to Loki
+loki.write "loki" {
+  endpoint {
+    url = "http://oib-loki:3100/loki/api/v1/push"
+  }
+}
+
+// ==================== Optional: System Logs ====================
+
+// Uncomment to also collect system logs
+// local.file_match "system_logs" {
+//   path_targets = [
+//     {__path__ = "/var/log/*.log", job = "system"},
+//     {__path__ = "/var/log/syslog", job = "syslog"},
+//   ]
+// }
+//
+// loki.source.file "system" {
+//   targets    = local.file_match.system_logs.targets
+//   forward_to = [loki.write.loki.receiver]
+// }

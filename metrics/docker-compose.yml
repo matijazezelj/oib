@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:10.2.3
+    image: grafana/grafana:11.3.1
     container_name: oib-grafana-metrics
     ports:
       - "3001:3000"

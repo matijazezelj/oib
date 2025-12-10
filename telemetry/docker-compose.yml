@@ -2,7 +2,7 @@ name: oib-telemetry
 
 services:
   tempo:
-    image: grafana/tempo:2.3.1
+    image: grafana/tempo:2.6.1
     container_name: oib-tempo
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     ports:
@@ -10,7 +10,7 @@ services:
       - "9095:9095"   # Tempo gRPC
     volumes:
       - ./config/tempo.yaml:/etc/tempo/tempo.yaml:ro
-      - oib-tempo-data:/tmp/tempo
+      - oib-tempo-data:/var/tempo
     networks:
       - oib-network
     healthcheck:
@@ -20,19 +20,20 @@ services:
       retries: 5
     restart: unless-stopped
 
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oib-otel-collector
-    command: ["--config=/etc/otel-collector/config.yaml"]
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: oib-alloy-telemetry
     ports:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
-      - "8888:8888"   # Prometheus metrics exposed by the collector
-      - "8889:8889"   # Prometheus exporter metrics
-      - "13133:13133" # Health check extension
-      - "55679:55679" # zpages extension
+      - "12346:12345" # Alloy UI (different port to avoid conflict with logging stack)
     volumes:
-      - ./config/otel-collector-config.yaml:/etc/otel-collector/config.yaml:ro
+      - ./config/alloy-config.alloy:/etc/alloy/config.alloy:ro
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
     networks:
       - oib-network
     extra_hosts:
@@ -41,14 +42,14 @@ services:
       tempo:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:13133/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:12345/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:10.2.3
+    image: grafana/grafana:11.3.1
     container_name: oib-grafana-telemetry
     ports:
       - "3002:3000"

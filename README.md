@@ -12,18 +12,18 @@ git clone <repo-url> oib && cd oib
 make install
 
 # Or install individual stacks
-make install-logging    # Loki + Promtail + Grafana
+make install-logging    # Loki + Alloy + Grafana
 make install-metrics    # Prometheus + Grafana
-make install-telemetry  # Tempo + OpenTelemetry Collector + Grafana
+make install-telemetry  # Tempo + Alloy + Grafana
 ```
 
 ## 📦 What's Included
 
 | Stack | Components | Purpose |
-|-------|------------|---------|
-| **Logging** | Loki, Promtail, Grafana | Centralized log aggregation |
+|-------|------------|---------||
+| **Logging** | Loki, Alloy, Grafana | Centralized log aggregation |
 | **Metrics** | Prometheus, Grafana | Metrics collection and visualization |
-| **Telemetry** | Tempo, OTEL Collector, Grafana | Distributed tracing |
+| **Telemetry** | Tempo, Alloy, Grafana | Distributed tracing |
 
 ## 🔌 Integration Endpoints
 
@@ -31,7 +31,8 @@ After installation, each stack will display integration endpoints:
 
 ### Logging Stack
 - **Push logs via Loki API**: `http://localhost:3100/loki/api/v1/push`
-- **Promtail scrapes**: Configure your apps to write to `/var/log` or use Docker logging driver
+- **Alloy UI**: `http://localhost:12345` (view pipeline status)
+- **Auto-collection**: Alloy automatically collects logs from all Docker containers
 - **Grafana UI**: `http://localhost:3000`
 
 ### Metrics Stack
