@@ -48,7 +48,7 @@ After installation, each stack will display integration endpoints:
 
 ### Grafana
 - **Grafana UI**: `http://<host>:3000`
-- **Default credentials**: `admin` / `admin`
+- **Credentials**: Set in `grafana/.env` (copy from `grafana/.env.example`)
 
 ## 🛠️ Commands
 
@@ -123,20 +123,9 @@ oib/
 │               ├── logs-explorer.json
 │               └── traces-explorer.json
 └── examples/
+    ├── README.md               # Example integration guide
     ├── python-flask/           # Python Flask example app
-    └── nodejs-express/         # Node.js Express example app
-```
-│   ├── docker-compose.yml
-│   └── config/
-│       └── prometheus.yml
-├── telemetry/
-│   ├── docker-compose.yml
-│   └── config/
-│       └── otel-collector-config.yml
-└── grafana/
-    └── provisioning/
-        ├── datasources/
-        └── dashboards/
+    └── node-express/           # Node.js Express example app
 ```
 
 ## 🔧 Configuration
@@ -202,6 +191,31 @@ const exporter = new OTLPTraceExporter({
 ## 🌐 Network
 
 All stacks run on a shared Docker network `oib-network` allowing inter-service communication.
+
+## 🔒 Security
+
+OIB includes security hardening for homelab use:
+
+- **No default passwords**: Grafana credentials configured via `.env` file
+- **Localhost binding**: Internal services (Prometheus, Loki, Tempo, etc.) only listen on `127.0.0.1`
+- **Non-privileged containers**: cAdvisor uses minimal capabilities instead of privileged mode
+- **Resource limits**: All containers have CPU/memory limits
+- **No-new-privileges**: Containers cannot gain additional privileges
+- **Non-root users**: Example apps run as non-root users
+
+**Public ports** (intentionally exposed for external access):
+- `3000` - Grafana UI
+- `4317/4318` - OTLP endpoints for trace ingestion
+
+## 📊 Data Retention
+
+Default retention policies (adjust in config files based on storage):
+
+| Component | Retention | Config File |
+|-----------|-----------|-------------|
+| Loki (logs) | 7 days | `logging/config/loki-config.yml` |
+| Tempo (traces) | 3 days | `telemetry/config/tempo.yaml` |
+| Prometheus (metrics) | 15 days or 5GB | `metrics/docker-compose.yml` |
 
 ## 💡 Tips
 

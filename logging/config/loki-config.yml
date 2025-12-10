@@ -45,6 +45,12 @@ limits_config:
   max_streams_per_user: 10000
   max_line_size: 256kb
   allow_structured_metadata: true
+  retention_period: 168h  # 7 days - adjust based on storage
+
+# Table manager for retention enforcement
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 168h  # 7 days
 
 storage_config:
   tsdb_shipper:

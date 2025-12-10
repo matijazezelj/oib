@@ -21,7 +21,7 @@ compactor:
   compaction:
     compaction_window: 1h
     max_block_bytes: 100_000_000
-    block_retention: 48h
+    block_retention: 72h      # 3 days - adjust based on storage
     compacted_block_retention: 1h
 
 storage:

@@ -4,6 +4,9 @@ global:
   external_labels:
     monitor: 'oib-monitor'
 
+# Storage retention - adjust based on available disk space
+# Note: Also set via --storage.tsdb.retention.time flag in docker-compose
+
 # Alerting configuration (optional - uncomment to enable)
 # alerting:
 #   alertmanagers:
