@@ -10,6 +10,7 @@ services:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/rules:/etc/prometheus/rules:ro
       - oib-prometheus-data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -67,9 +68,6 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    command:
-      - '--docker_only=true'
-      - '--store_container_labels=true'
     privileged: true
     devices:
       - /dev/kmsg
