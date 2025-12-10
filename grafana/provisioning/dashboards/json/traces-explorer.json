@@ -1,7 +1,5 @@
 {
-  "annotations": {
-    "list": []
-  },
+  "annotations": {"list": []},
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -10,115 +8,73 @@
   "liveNow": false,
   "panels": [
     {
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "# 🔭 Traces Explorer\n\nSearch and explore distributed traces. Use the Explore view for advanced TraceQL queries.\n\n**Quick Links:** [Explore Traces](/explore?orgId=1&left=%7B%22datasource%22:%22Tempo%22%7D)",
+        "content": "# 🔭 Traces Explorer\n\nSearch and explore distributed traces. Use the **Explore** view for advanced TraceQL queries.\n\n**Quick Links:** [Explore Traces](/explore?orgId=1&left={\"datasource\":\"tempo\",\"queries\":[{\"refId\":\"A\",\"queryType\":\"traceql\",\"query\":\"{}\"}]})",
         "mode": "markdown"
       },
-      "pluginVersion": "10.2.3",
       "title": "",
       "transparent": true,
       "type": "text"
     },
     {
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 0,
-        "y": 4
-      },
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 4},
       "id": 2,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "## 📡 OTLP Endpoints\n\n**gRPC:** `localhost:4317`  \n**HTTP:** `http://localhost:4318`",
+        "content": "## 📡 OTLP Endpoints\n\n**gRPC:** `<host>:4317`  \n**HTTP:** `http://<host>:4318`",
         "mode": "markdown"
       },
-      "pluginVersion": "10.2.3",
       "title": "Integration",
       "type": "text"
     },
     {
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 4
-      },
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 4},
       "id": 3,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "## 🔧 Environment Variables\n\n```bash\nOTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318\nOTEL_SERVICE_NAME=my-service\n```",
+        "content": "## 🔧 Environment Variables\n\n```\nOTEL_EXPORTER_OTLP_ENDPOINT=http://<host>:4318\nOTEL_SERVICE_NAME=my-service\n```",
         "mode": "markdown"
       },
-      "pluginVersion": "10.2.3",
       "title": "Configuration",
       "type": "text"
     },
     {
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 4
-      },
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 4},
       "id": 4,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "## 📚 Also Supported\n\n- **Jaeger:** `localhost:14268` (HTTP), `localhost:14250` (gRPC)\n- **Zipkin:** `localhost:9411`",
+        "content": "## 📊 Trace Search\n\nUse the **Explore** page to search traces:\n- By service: `{resource.service.name=\"my-app\"}`\n- By duration: `{duration > 100ms}`",
         "mode": "markdown"
       },
-      "pluginVersion": "10.2.3",
-      "title": "Legacy Protocols",
+      "title": "TraceQL Examples",
       "type": "text"
     },
     {
-      "datasource": {
-        "type": "tempo",
-        "uid": "tempo"
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "short"
+        }
       },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 8
-      },
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 8},
+      "id": 6,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceqlmetrics", "query": "{} | count() by (resource.service.name)", "refId": "A"}],
+      "title": "Services Sending Traces",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 12},
       "id": 5,
-      "options": {
-        "showSearch": true,
-        "showServiceGraph": true
-      },
       "targets": [
         {
-          "datasource": {
-            "type": "tempo",
-            "uid": "tempo"
-          },
+          "datasource": {"type": "tempo", "uid": "tempo"},
+          "queryType": "traceqlSearch",
           "limit": 20,
-          "queryType": "nativeSearch",
-          "refId": "A"
+          "refId": "A",
+          "filters": []
         }
       ],
       "title": "Recent Traces",
@@ -128,17 +84,11 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "tags": ["oib", "telemetry", "tempo", "tracing"],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "",
   "title": "OIB - Traces Explorer",
   "uid": "oib-traces-explorer",
-  "version": 1,
-  "weekStart": ""
+  "version": 1
 }

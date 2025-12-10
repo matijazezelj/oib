@@ -36,6 +36,16 @@ scrape_configs:
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
+    metric_relabel_configs:
+      # Extract container name from id like /docker/<container_id> or /system.slice/docker-<id>.scope
+      - source_labels: [id]
+        regex: '/docker/(.+)'
+        target_label: container_id
+        replacement: '${1}'
+      - source_labels: [id]
+        regex: '/system.slice/docker-(.+)\.scope'
+        target_label: container_id
+        replacement: '${1}'
 
   # ============================================
   # ADD YOUR CUSTOM SCRAPE TARGETS BELOW
