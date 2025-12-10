@@ -43,6 +43,9 @@ datasources:
         spanStartTimeShift: '-1h'
         spanEndTimeShift: '1h'
         filterByTraceID: true
-        tags: ['service.name']
+        filterBySpanID: false
+        tags:
+          - key: service.name
+            value: service_name
       tracesToMetrics:
         datasourceUid: prometheus
