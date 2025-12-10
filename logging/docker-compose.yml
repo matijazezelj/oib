@@ -5,7 +5,7 @@ services:
     image: grafana/loki:3.3.2
     container_name: oib-loki
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
       - ./config/loki-config.yml:/etc/loki/local-config.yaml:ro
       - oib-loki-data:/loki
@@ -18,12 +18,21 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          memory: 256M
 
   alloy:
     image: grafana/alloy:v1.5.1
     container_name: oib-alloy-logging
     ports:
-      - "12345:12345"   # Alloy UI
+      - "127.0.0.1:12345:12345"   # Alloy UI
     volumes:
       - ./config/alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /var/log:/var/log:ro
@@ -39,6 +48,15 @@ services:
       loki:
         condition: service_healthy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 128M
 
 volumes:
   oib-loki-data:

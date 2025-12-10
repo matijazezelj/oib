@@ -5,7 +5,7 @@ services:
     image: prom/prometheus:v2.48.1
     container_name: oib-prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/rules:/etc/prometheus/rules:ro
@@ -15,7 +15,6 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
       - '--web.enable-remote-write-receiver'
     networks:
       - oib-network
@@ -27,21 +26,39 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          memory: 256M
 
   pushgateway:
     image: prom/pushgateway:v1.6.2
     container_name: oib-pushgateway
     ports:
-      - "9091:9091"
+      - "127.0.0.1:9091:9091"
     networks:
       - oib-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          memory: 32M
 
   node-exporter:
     image: prom/node-exporter:v1.7.0
     container_name: oib-node-exporter
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -54,12 +71,21 @@ services:
     networks:
       - oib-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          memory: 32M
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.47.2
     container_name: oib-cadvisor
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -67,12 +93,27 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    privileged: true
     devices:
       - /dev/kmsg
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - no-new-privileges:true
     networks:
       - oib-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 128M
 
 volumes:
   oib-prometheus-data:

@@ -6,8 +6,8 @@ services:
     container_name: oib-tempo
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     ports:
-      - "3200:3200"   # Tempo HTTP
-      - "9095:9095"   # Tempo gRPC
+      - "127.0.0.1:3200:3200"   # Tempo HTTP
+      - "127.0.0.1:9095:9095"   # Tempo gRPC
     volumes:
       - ./config/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - oib-tempo-data:/var/tempo
@@ -19,14 +19,23 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          memory: 256M
 
   alloy:
     image: grafana/alloy:v1.5.1
     container_name: oib-alloy-telemetry
     ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
-      - "12346:12345" # Alloy UI (different port to avoid conflict with logging stack)
+      - "4317:4317"   # OTLP gRPC (external apps need this)
+      - "4318:4318"   # OTLP HTTP (external apps need this)
+      - "127.0.0.1:12346:12345" # Alloy UI (localhost only)
     volumes:
       - ./config/alloy-config.alloy:/etc/alloy/config.alloy:ro
     command:
@@ -47,6 +56,15 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 128M
 
 volumes:
   oib-tempo-data:
