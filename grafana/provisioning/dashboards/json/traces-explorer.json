@@ -8,7 +8,7 @@
   "liveNow": false,
   "panels": [
     {
-      "gridPos": {"h": 5, "w": 24, "x": 0, "y": 0},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {
         "content": "# 🔭 Distributed Tracing with Tempo\n\nTraces are collected via OpenTelemetry and stored in Grafana Tempo.\n\n## 👉 [Click here to Search Traces in Explore](/explore?schemaVersion=1&panes=%7B%22v1b%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceqlSearch%22%2C%22limit%22%3A20%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1)\n\nThe **Explore** view provides the best experience for:\n- Searching traces by service, duration, status\n- Viewing trace timelines and span details\n- Correlating traces with logs",
@@ -19,7 +19,7 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 5},
+      "gridPos": {"h": 10, "w": 8, "x": 0, "y": 10},
       "id": 2,
       "options": {
         "content": "## 📡 OTLP Endpoints\n\nSend traces to these endpoints:\n\n| Protocol | Endpoint |\n|----------|----------|\n| **gRPC** | `<oib-host>:4317` |\n| **HTTP** | `http://<oib-host>:4318` |\n\nReplace `<oib-host>` with your OIB server IP/hostname.",
@@ -29,7 +29,7 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 5},
+      "gridPos": {"h": 10, "w": 8, "x": 8, "y": 10},
       "id": 3,
       "options": {
         "content": "## 🔧 App Configuration\n\nSet these environment variables:\n\n```bash\nexport OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318\nexport OTEL_SERVICE_NAME=my-service\n```\n\nFor Docker containers on oib-network:\n```bash\nOTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4317\n```",
@@ -39,7 +39,7 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 5},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 10},
       "id": 4,
       "options": {
         "content": "## 📊 TraceQL Query Examples\n\nUse these in the Explore view:\n\n```sql\n# All traces\n{}\n\n# By service name\n{resource.service.name=\"my-app\"}\n\n# Slow requests (>100ms)\n{duration > 100ms}\n\n# HTTP errors\n{span.http.status_code >= 400}\n\n# Specific operation\n{name = \"GET /api/users\"}\n```",
@@ -49,7 +49,7 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 13, "w": 12, "x": 0, "y": 12},
+      "gridPos": {"h": 20, "w": 12, "x": 0, "y": 20},
       "id": 5,
       "options": {
         "content": "## 🐍 Python Example\n\n```python\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\n\n# Set up the tracer provider\nprovider = TracerProvider()\nexporter = OTLPSpanExporter(\n    endpoint=\"oib-alloy-telemetry:4317\",\n    insecure=True\n)\nprovider.add_span_processor(BatchSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\n\n# Get a tracer and create spans\ntracer = trace.get_tracer(__name__)\n\nwith tracer.start_as_current_span(\"my-operation\") as span:\n    span.set_attribute(\"key\", \"value\")\n    # Your code here\n```\n\n📁 See `examples/python-flask` for complete example",
@@ -59,7 +59,7 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 13, "w": 12, "x": 12, "y": 12},
+      "gridPos": {"h": 20, "w": 12, "x": 12, "y": 20},
       "id": 6,
       "options": {
         "content": "## 🟢 Node.js Example\n\n**tracing.js** (loaded via `--require`):\n```javascript\nconst { NodeSDK } = require('@opentelemetry/sdk-node');\nconst { getNodeAutoInstrumentations } = require(\n  '@opentelemetry/auto-instrumentations-node');\nconst { OTLPTraceExporter } = require(\n  '@opentelemetry/exporter-trace-otlp-grpc');\nconst grpc = require('@grpc/grpc-js');\n\nconst sdk = new NodeSDK({\n  traceExporter: new OTLPTraceExporter({\n    url: 'http://oib-alloy-telemetry:4317',\n    credentials: grpc.credentials.createInsecure(),\n  }),\n  instrumentations: [getNodeAutoInstrumentations()],\n});\nsdk.start();\n```\n\n**package.json**:\n```json\n\"scripts\": {\n  \"start\": \"node --require ./tracing.js app.js\"\n}\n```\n\n📁 See `examples/node-express` for complete example",
