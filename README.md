@@ -32,23 +32,40 @@ make install-grafana    # Unified Grafana with all datasources
 After installation, each stack will display integration endpoints:
 
 ### Logging Stack
-- **Push logs via Loki API**: `http://<host>:3100/loki/api/v1/push`
-- **Alloy UI**: `http://<host>:12345` (view pipeline status)
+- **Loki API**: `http://localhost:3100` (localhost only - use from host or oib-network)
+- **Alloy UI**: `http://localhost:12345` (view pipeline status)
 - **Auto-collection**: Alloy automatically collects logs from all Docker containers
 
+> **From Docker containers**: Use `oib-loki:3100` on `oib-network`
+
 ### Metrics Stack
-- **Prometheus**: `http://<host>:9090`
-- **Push metrics**: `http://<host>:9091` (Pushgateway)
-- **Node Exporter**: `http://<host>:9100` (host metrics)
-- **cAdvisor**: `http://<host>:8080` (container metrics)
+- **Prometheus**: `http://localhost:9090` (localhost only)
+- **Pushgateway**: `http://localhost:9091` (localhost only)
+- **Node Exporter**: `http://localhost:9100` (localhost only)
+- **cAdvisor**: `http://localhost:8080` (localhost only)
+
+> **From Docker containers**: Use hostnames like `oib-prometheus:9090` on `oib-network`
 
 ### Telemetry Stack
-- **OTLP gRPC**: `<host>:4317` (from Docker: `oib-alloy-telemetry:4317`)
-- **OTLP HTTP**: `http://<host>:4318`
+- **OTLP gRPC**: `<host>:4317` ✅ Public - accepts traces from anywhere
+- **OTLP HTTP**: `http://<host>:4318` ✅ Public - accepts traces from anywhere
+- **Tempo API**: `http://localhost:3200` (localhost only)
+
+> **From Docker containers**: Use `oib-alloy-telemetry:4317` on `oib-network`
 
 ### Grafana
-- **Grafana UI**: `http://<host>:3000`
+- **Grafana UI**: `http://<host>:3000` ✅ Public
 - **Credentials**: Set in `grafana/.env` (copy from `grafana/.env.example`)
+
+### 📊 Pre-built Dashboards
+
+OIB comes with three ready-to-use dashboards:
+
+| Dashboard | Description |
+|-----------|-------------|
+| **System Overview** | Host metrics, container CPU/memory, disk usage |
+| **Logs Explorer** | Log volume, live logs, errors/warnings panel |
+| **Traces Explorer** | TraceQL examples, Python & Node.js code samples |
 
 ## 🛠️ Commands
 
@@ -180,13 +197,17 @@ exporter = OTLPSpanExporter(endpoint="localhost:4317", insecure=True)
 ```
 
 ```javascript
-// Node.js example
+// Node.js example - note: requires insecure credentials for non-TLS
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc');
+const grpc = require('@grpc/grpc-js');
 
 const exporter = new OTLPTraceExporter({
   url: 'http://localhost:4317',
+  credentials: grpc.credentials.createInsecure(),
 });
 ```
+
+> 💡 See `examples/` for complete working Python Flask and Node.js Express apps with full observability.
 
 ## 🌐 Network
 
