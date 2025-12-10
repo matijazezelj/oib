@@ -15,7 +15,7 @@ require_once __DIR__ . '/../bootstrap/metrics.php';
 use OpenTelemetry\API\Globals;
 
 // Get tracer
-$tracer = Globals::tracerProvider()->getTracer('example-laravel-app');
+$tracer = Globals::tracerProvider()->getTracer('example-php-app');
 
 // Simple router
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -34,7 +34,7 @@ function logMessage(string $level, string $message, array $context = []): void {
         'timestamp' => date('c'),
         'level' => $level,
         'message' => $message,
-        'service' => 'example-laravel-app',
+        'service' => 'example-php-app',
     ], $context);
     error_log(json_encode($log));
 }
@@ -79,7 +79,7 @@ switch (true) {
         break;
 
     case $uri === '/health' && $method === 'GET':
-        jsonResponse(['status' => 'healthy', 'service' => 'example-laravel-app']);
+        jsonResponse(['status' => 'healthy', 'service' => 'example-php-app']);
         break;
 
     case $uri === '/metrics' && $method === 'GET':
