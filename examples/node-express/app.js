@@ -23,19 +23,26 @@ const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumenta
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc');
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
+
+// Enable OTEL diagnostics for debugging
+diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
+
+const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'localhost:4317';
+console.log(`OTEL Endpoint: ${otelEndpoint}`);
 
 const sdk = new NodeSDK({
   resource: new Resource({
     [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'example-express-app',
   }),
   traceExporter: new OTLPTraceExporter({
-    // gRPC exporter expects host:port without scheme
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'localhost:4317',
+    url: otelEndpoint,
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });
 
 sdk.start();
+console.log('OTEL SDK started');
 
 // ==================== Logging Setup ====================
 const logger = pino({
