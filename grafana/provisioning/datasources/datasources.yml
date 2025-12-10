@@ -1,0 +1,48 @@
+apiVersion: 1
+
+datasources:
+  # Loki - Logs
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://oib-loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000
+
+  # Prometheus - Metrics
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://oib-prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+
+  # Tempo - Traces
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://oib-tempo:3200
+    isDefault: false
+    editable: false
+    jsonData:
+      httpMethod: GET
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      tracesToLogs:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        tags: ['service.name']
+      tracesToMetrics:
+        datasourceUid: prometheus

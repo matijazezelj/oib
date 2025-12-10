@@ -1,0 +1,32 @@
+name: oib-grafana
+
+services:
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: oib-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - oib-grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - oib-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  oib-network:
+    external: true
+
+volumes:
+  oib-grafana-data:

@@ -73,36 +73,9 @@ services:
       - oib-network
     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:11.3.1
-    container_name: oib-grafana-metrics
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3001
-    volumes:
-      - oib-grafana-metrics-data:/var/lib/grafana
-      - ./provisioning:/etc/grafana/provisioning:ro
-    networks:
-      - oib-network
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
 volumes:
   oib-prometheus-data:
     name: oib-prometheus-data
-  oib-grafana-metrics-data:
-    name: oib-grafana-metrics-data
 
 networks:
   oib-network:
