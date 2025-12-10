@@ -4,10 +4,12 @@ services:
   tempo:
     image: grafana/tempo:2.6.1
     container_name: oib-tempo
+    env_file:
+      - ../.env
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     ports:
-      - "127.0.0.1:3200:3200"   # Tempo HTTP
-      - "127.0.0.1:9095:9095"   # Tempo gRPC
+      - "127.0.0.1:${TEMPO_HTTP_PORT:-3200}:3200"   # Tempo HTTP
+      - "127.0.0.1:${TEMPO_GRPC_PORT:-9095}:9095"   # Tempo gRPC
     volumes:
       - ./config/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - oib-tempo-data:/var/tempo
@@ -33,9 +35,9 @@ services:
     image: grafana/alloy:v1.5.1
     container_name: oib-alloy-telemetry
     ports:
-      - "4317:4317"   # OTLP gRPC (external apps need this)
-      - "4318:4318"   # OTLP HTTP (external apps need this)
-      - "127.0.0.1:12346:12345" # Alloy UI (localhost only)
+      - "${OTEL_GRPC_PORT:-4317}:4317"   # OTLP gRPC (external apps need this)
+      - "${OTEL_HTTP_PORT:-4318}:4318"   # OTLP HTTP (external apps need this)
+      - "127.0.0.1:${ALLOY_TELEMETRY_PORT:-12346}:12345" # Alloy UI (localhost only)
     volumes:
       - ./config/alloy-config.alloy:/etc/alloy/config.alloy:ro
     command:

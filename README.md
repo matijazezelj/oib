@@ -55,7 +55,7 @@ After installation, each stack will display integration endpoints:
 
 ### Grafana
 - **Grafana UI**: `http://<host>:3000` ✅ Public
-- **Credentials**: Set in `grafana/.env` (copy from `grafana/.env.example`)
+- **Credentials**: Set in root `.env` (copy from `.env.example`)
 
 ### 📊 Pre-built Dashboards
 
@@ -66,6 +66,36 @@ OIB comes with three ready-to-use dashboards:
 | **System Overview** | Host metrics, container CPU/memory, disk usage |
 | **Logs Explorer** | Log volume, live logs, errors/warnings panel |
 | **Traces Explorer** | TraceQL examples, Python & Node.js code samples |
+
+## ⚙️ Configuration
+
+All configuration is managed through a single `.env` file at the project root.
+
+```bash
+# Copy the example and customize
+cp .env.example .env
+```
+
+### Available Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana admin username |
+| `GRAFANA_ADMIN_PASSWORD` | (required) | Grafana admin password |
+| `GRAFANA_PORT` | `3000` | Grafana web UI port |
+| `LOKI_PORT` | `3100` | Loki API port (localhost only) |
+| `PROMETHEUS_PORT` | `9090` | Prometheus API port (localhost only) |
+| `PUSHGATEWAY_PORT` | `9091` | Pushgateway port (localhost only) |
+| `NODE_EXPORTER_PORT` | `9100` | Node Exporter port (localhost only) |
+| `CADVISOR_PORT` | `8080` | cAdvisor port (localhost only) |
+| `TEMPO_HTTP_PORT` | `3200` | Tempo HTTP API port (localhost only) |
+| `TEMPO_GRPC_PORT` | `9095` | Tempo gRPC port (localhost only) |
+| `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver (public) |
+| `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver (public) |
+| `PROMETHEUS_RETENTION_TIME` | `15d` | Prometheus data retention time |
+| `PROMETHEUS_RETENTION_SIZE` | `5GB` | Prometheus data retention size |
+
+> **Note**: Loki and Tempo retention are configured in their respective config files, not via environment variables.
 
 ## 🛠️ Commands
 

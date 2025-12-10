@@ -4,8 +4,10 @@ services:
   prometheus:
     image: prom/prometheus:v2.48.1
     container_name: oib-prometheus
+    env_file:
+      - ../.env
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/rules:/etc/prometheus/rules:ro
@@ -13,8 +15,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=15d'
-      - '--storage.tsdb.retention.size=5GB'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}'
+      - '--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-5GB}'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-remote-write-receiver'
@@ -42,7 +44,7 @@ services:
     image: prom/pushgateway:v1.6.2
     container_name: oib-pushgateway
     ports:
-      - "127.0.0.1:9091:9091"
+      - "127.0.0.1:${PUSHGATEWAY_PORT:-9091}:9091"
     networks:
       - oib-network
     restart: unless-stopped
@@ -60,7 +62,7 @@ services:
     image: prom/node-exporter:v1.7.0
     container_name: oib-node-exporter
     ports:
-      - "127.0.0.1:9100:9100"
+      - "127.0.0.1:${NODE_EXPORTER_PORT:-9100}:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -87,7 +89,7 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.47.2
     container_name: oib-cadvisor
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${CADVISOR_PORT:-8080}:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
