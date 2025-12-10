@@ -2,47 +2,17 @@
  * Example: Instrumented Node.js Express App
  * 
  * This example shows how to integrate a Node.js Express app with all OIB stacks:
- * - Logs -> Loki (via pino + loki transport)
+ * - Logs -> Loki (via pino + stdout, collected by Alloy)
  * - Metrics -> Prometheus (via prom-client)
- * - Traces -> Tempo (via OpenTelemetry)
+ * - Traces -> Tempo (via OpenTelemetry - loaded via tracing.js)
  * 
- * Install dependencies:
- *   npm install express prom-client pino pino-loki \
- *               @opentelemetry/api @opentelemetry/sdk-node \
- *               @opentelemetry/auto-instrumentations-node \
- *               @opentelemetry/exporter-trace-otlp-grpc
+ * Tracing is initialized via: node --require ./tracing.js app.js
+ * This ensures instrumentation loads before any other modules.
  */
 
 const express = require('express');
 const client = require('prom-client');
 const pino = require('pino');
-
-// ==================== Tracing Setup ====================
-const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc');
-const { Resource } = require('@opentelemetry/resources');
-const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
-const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
-
-// Enable OTEL diagnostics for debugging
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
-
-const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'localhost:4317';
-console.log(`OTEL Endpoint: ${otelEndpoint}`);
-
-const sdk = new NodeSDK({
-  resource: new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'example-express-app',
-  }),
-  traceExporter: new OTLPTraceExporter({
-    url: otelEndpoint,
-  }),
-  instrumentations: [getNodeAutoInstrumentations()],
-});
-
-sdk.start();
-console.log('OTEL SDK started');
 
 // ==================== Logging Setup ====================
 const logger = pino({
@@ -140,15 +110,4 @@ app.get('/health', (req, res) => {
 // Start server
 app.listen(PORT, () => {
   logger.info({ port: PORT }, 'App starting');
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('Shutting down...');
-  sdk.shutdown()
-    .then(() => process.exit(0))
-    .catch((err) => {
-      logger.error(err, 'Error during shutdown');
-      process.exit(1);
-    });
 });

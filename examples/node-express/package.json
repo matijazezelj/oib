@@ -4,8 +4,8 @@
   "description": "Example Express app integrated with OIB observability stack",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "node --watch app.js"
+    "start": "node --require ./tracing.js app.js",
+    "dev": "node --require ./tracing.js --watch app.js"
   },
   "dependencies": {
     "express": "^4.18.2",
