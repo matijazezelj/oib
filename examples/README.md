@@ -191,7 +191,70 @@ const sdk = new NodeSDK({
 
 ---
 
-## What Both Examples Demonstrate
+### Ruby on Rails (`ruby-rails/`)
+
+A fully instrumented Rails API application with OpenTelemetry, Prometheus metrics, and structured logging.
+
+**Features:**
+- **Logs**: Structured JSON logging via Lograge with trace context injection
+- **Metrics**: Prometheus metrics via `prometheus-client` gem
+- **Traces**: OpenTelemetry auto-instrumentation for Rails, HTTP, and more
+
+**Endpoints:**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Home page - returns welcome message |
+| `GET /api/data` | Simulates processing with random delay (50-500ms) |
+| `GET /api/error` | Triggers an intentional error for testing |
+| `GET /metrics` | Prometheus metrics endpoint |
+| `GET /health` | Health check endpoint |
+
+**Run:**
+```bash
+cd ruby-rails
+docker compose up -d
+# App available at http://localhost:3004
+```
+
+**Key Files:**
+- `config/initializers/opentelemetry.rb` - OpenTelemetry setup
+- `config/initializers/prometheus.rb` - Prometheus metrics setup
+- `app/controllers/` - Controller implementations
+- `docker-compose.yml` - Container configuration with OIB network
+
+**Dependencies (Gemfile):**
+```ruby
+gem "opentelemetry-sdk"
+gem "opentelemetry-exporter-otlp"
+gem "opentelemetry-instrumentation-all"
+gem "prometheus-client"
+gem "lograge"  # Structured JSON logging
+```
+
+**HTTP Exporter Configuration:**
+
+Ruby's OpenTelemetry uses the HTTP exporter by default. Configure it to use Alloy's OTLP HTTP endpoint:
+
+```ruby
+# config/initializers/opentelemetry.rb
+OpenTelemetry::SDK.configure do |c|
+  c.service_name = ENV.fetch("OTEL_SERVICE_NAME", "example-rails-app")
+
+  c.add_span_processor(
+    OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(
+      OpenTelemetry::Exporter::OTLP::Exporter.new(
+        endpoint: "#{ENV['OTEL_EXPORTER_OTLP_ENDPOINT']}/v1/traces"
+      )
+    )
+  )
+
+  c.use_all  # Auto-instrument Rails, Net::HTTP, etc.
+end
+```
+
+---
+
+## What All Examples Demonstrate
 
 - ✅ Automatic trace context propagation
 - ✅ Trace IDs injected into log messages
@@ -202,18 +265,18 @@ const sdk = new NodeSDK({
 
 ## Viewing in Grafana
 
-1. **Logs**: Explore → Loki → `{service_name="example-flask-app"}` or `{service_name="example-express-app"}`
+1. **Logs**: Explore → Loki → `{service_name="example-flask-app"}` or `{service_name="example-express-app"}` or `{service_name="example-rails-app"}`
 2. **Traces**: Explore → Tempo → Search by service name
 3. **Trace-to-Log**: Click a trace in Tempo → "Logs for this span" to see correlated logs
 4. **Metrics**: Explore → Prometheus → Query app metrics
 
 ## Environment Variables
 
-Both examples use these environment variables (set in docker-compose.yml):
+All examples use these environment variables (set in docker-compose.yml):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Alloy OTLP gRPC endpoint | `oib-alloy-telemetry:4317` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Alloy OTLP endpoint | `oib-alloy-telemetry:4317` (gRPC) or `:4318` (HTTP) |
 | `OTEL_SERVICE_NAME` | Service name for traces | `example-flask-app` |
 
 ## Generating Test Traffic
@@ -231,5 +294,12 @@ for i in {1..10}; do
   curl -s http://localhost:3003/
   curl -s http://localhost:3003/api/data
   curl -s http://localhost:3003/api/error 2>/dev/null
+done
+
+# Generate traffic to Rails app
+for i in {1..10}; do
+  curl -s http://localhost:3004/
+  curl -s http://localhost:3004/api/data
+  curl -s http://localhost:3004/api/error 2>/dev/null
 done
 ```

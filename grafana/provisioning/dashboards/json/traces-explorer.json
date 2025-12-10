@@ -67,6 +67,16 @@
       },
       "title": "Node.js Code Example",
       "type": "text"
+    },
+    {
+      "gridPos": {"h": 17, "w": 16, "x": 0, "y": 33},
+      "id": 7,
+      "options": {
+        "content": "## 💎 Ruby on Rails Example\n\n**config/initializers/opentelemetry.rb**:\n```ruby\nrequire 'opentelemetry/sdk'\nrequire 'opentelemetry/exporter/otlp'\nrequire 'opentelemetry/instrumentation/all'\n\nOpenTelemetry::SDK.configure do |c|\n  c.service_name = ENV.fetch('OTEL_SERVICE_NAME', 'my-rails-app')\n\n  c.add_span_processor(\n    OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(\n      OpenTelemetry::Exporter::OTLP::Exporter.new(\n        endpoint: \"#{ENV['OTEL_EXPORTER_OTLP_ENDPOINT']}/v1/traces\"\n      )\n    )\n  )\n\n  c.use_all  # Auto-instrument Rails, Net::HTTP, etc.\nend\n```\n\n**Gemfile**:\n```ruby\ngem 'opentelemetry-sdk'\ngem 'opentelemetry-exporter-otlp'\ngem 'opentelemetry-instrumentation-all'\n```\n\n📁 See `examples/ruby-rails` for complete example",
+        "mode": "markdown"
+      },
+      "title": "Ruby on Rails Code Example",
+      "type": "text"
     }
   ],
   "refresh": false,

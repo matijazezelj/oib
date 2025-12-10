@@ -1,0 +1,36 @@
+name: example-ruby-rails
+
+services:
+  ruby-rails-app:
+    build: .
+    container_name: example-ruby-rails
+    ports:
+      - "3004:3000"
+    environment:
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - SECRET_KEY_BASE=example_secret_key_base_for_demo_only_change_in_production
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
+      - OTEL_SERVICE_NAME=example-rails-app
+    networks:
+      - oib-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  oib-network:
+    external: true
