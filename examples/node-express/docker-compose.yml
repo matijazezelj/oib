@@ -1,0 +1,20 @@
+name: example-express
+
+services:
+  express-app:
+    build: .
+    container_name: example-express-app
+    ports:
+      - "3003:3000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=grpc://oib-otel-collector:4317
+      - OTEL_SERVICE_NAME=example-express-app
+      - NODE_ENV=production
+    networks:
+      - oib-network
+    labels:
+      app: "example-express"
+
+networks:
+  oib-network:
+    external: true

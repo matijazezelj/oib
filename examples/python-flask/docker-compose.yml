@@ -1,0 +1,26 @@
+name: example-flask
+
+services:
+  flask-app:
+    build: .
+    container_name: example-flask-app
+    ports:
+      - "5000:5000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-otel-collector:4317
+      - OTEL_SERVICE_NAME=example-flask-app
+    networks:
+      - oib-network
+    # Send logs to Loki via Docker logging driver
+    # Requires: docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+    # logging:
+    #   driver: loki
+    #   options:
+    #     loki-url: "http://host.docker.internal:3100/loki/api/v1/push"
+    #     labels: "app"
+    labels:
+      app: "example-flask"
+
+networks:
+  oib-network:
+    external: true

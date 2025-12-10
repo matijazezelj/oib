@@ -1,0 +1,15 @@
+# Placeholder for Prometheus alerting rules
+# Add your custom rules here
+
+# Example:
+# groups:
+#   - name: example
+#     rules:
+#       - alert: HighMemoryUsage
+#         expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+#         for: 5m
+#         labels:
+#           severity: warning
+#         annotations:
+#           summary: "High memory usage detected"
+#           description: "Memory usage is above 80% for more than 5 minutes"
