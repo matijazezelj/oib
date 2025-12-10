@@ -1,24 +1,25 @@
 {
-    "name": "example/php-laravel",
+    "name": "example/php-app",
     "type": "project",
-    "description": "OIB Example: PHP Laravel with full observability",
+    "description": "OIB Example: PHP with full observability",
     "require": {
         "php": "^8.2",
-        "laravel/framework": "^11.0",
         "open-telemetry/sdk": "^1.0",
         "open-telemetry/exporter-otlp": "^1.0",
-        "open-telemetry/transport-grpc": "^1.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "nyholm/psr7": "^1.8",
         "promphp/prometheus_client_php": "^2.6",
         "monolog/monolog": "^3.0"
     },
     "require-dev": {},
     "autoload": {
         "psr-4": {
-            "App\\": "app/"
-        }
-    },
-    "scripts": {
-        "start": "php artisan serve --host=0.0.0.0 --port=8000"
+            "App\\": "src/"
+        },
+        "files": [
+            "bootstrap/tracing.php",
+            "bootstrap/metrics.php"
+        ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true
