@@ -34,6 +34,11 @@ from opentelemetry.sdk.resources import Resource
 # Configure tracer
 import os
 otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+# Strip http:// or https:// for gRPC exporter (it only wants host:port)
+if otel_endpoint.startswith("http://"):
+    otel_endpoint = otel_endpoint[7:]
+elif otel_endpoint.startswith("https://"):
+    otel_endpoint = otel_endpoint[8:]
 resource = Resource.create({"service.name": os.environ.get("OTEL_SERVICE_NAME", "example-flask-app")})
 provider = TracerProvider(resource=resource)
 processor = BatchSpanProcessor(OTLPSpanExporter(
