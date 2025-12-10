@@ -14,6 +14,7 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-grpc')
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
+const grpc = require('@grpc/grpc-js');
 
 // Enable OTEL diagnostics
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
@@ -27,7 +28,8 @@ const sdk = new NodeSDK({
     [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'example-express-app',
   }),
   traceExporter: new OTLPTraceExporter({
-    url: otelEndpoint,
+    url: `http://${otelEndpoint}`,
+    credentials: grpc.credentials.createInsecure(),
   }),
   instrumentations: [getNodeAutoInstrumentations({
     '@opentelemetry/instrumentation-fs': {
