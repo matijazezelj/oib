@@ -8,10 +8,10 @@
   "liveNow": false,
   "panels": [
     {
-      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "gridPos": {"h": 5, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {
-        "content": "# 🔭 Traces Explorer\n\nSearch and explore distributed traces. Use the **Explore** view for advanced TraceQL queries.\n\n**Quick Links:** [Explore Traces](/explore?orgId=1&left={\"datasource\":\"tempo\",\"queries\":[{\"refId\":\"A\",\"queryType\":\"traceql\",\"query\":\"{}\"}]})",
+        "content": "# 🔭 Traces Explorer\n\nDistributed traces are collected via OpenTelemetry and stored in Tempo.\n\n## 👉 [Open Trace Search in Explore](/explore?schemaVersion=1&panes=%7B%22v1b%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceqlSearch%22%2C%22limit%22%3A20%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1)\n\nThe Explore view provides the best experience for searching and analyzing traces.",
         "mode": "markdown"
       },
       "title": "",
@@ -19,33 +19,33 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 4},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 5},
       "id": 2,
       "options": {
-        "content": "## 📡 OTLP Endpoints\n\n**gRPC:** `<host>:4317`  \n**HTTP:** `http://<host>:4318`",
+        "content": "## 📡 OTLP Endpoints\n\n| Protocol | Endpoint |\n|----------|----------|\n| **gRPC** | `<oib-host>:4317` |\n| **HTTP** | `http://<oib-host>:4318` |",
         "mode": "markdown"
       },
       "title": "Integration",
       "type": "text"
     },
     {
-      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 4},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 5},
       "id": 3,
       "options": {
-        "content": "## 🔧 Environment Variables\n\n```\nOTEL_EXPORTER_OTLP_ENDPOINT=http://<host>:4318\nOTEL_SERVICE_NAME=my-service\n```",
+        "content": "## 🔧 Configuration\n\n```bash\n# Set these environment variables in your app\nexport OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318\nexport OTEL_SERVICE_NAME=my-service\n```",
         "mode": "markdown"
       },
-      "title": "Configuration",
+      "title": "Environment Variables",
       "type": "text"
     },
     {
-      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 4},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 5},
       "id": 4,
       "options": {
-        "content": "## 📊 Trace Search\n\nUse the **Explore** page to search traces:\n- By service: `{resource.service.name=\"my-app\"}`\n- By duration: `{duration > 100ms}`",
+        "content": "## 📊 TraceQL Examples\n\n```\n# All traces\n{}\n\n# By service name\n{resource.service.name=\"my-app\"}\n\n# Slow requests (>100ms)\n{duration > 100ms}\n\n# Errors only  \n{status = error}\n```",
         "mode": "markdown"
       },
-      "title": "TraceQL Examples",
+      "title": "Query Examples",
       "type": "text"
     },
     {
@@ -53,32 +53,31 @@
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "thresholds"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
-          "unit": "short"
-        }
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": []
       },
-      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 8},
-      "id": 6,
-      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
-      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceqlmetrics", "query": "{} | count() by (resource.service.name)", "refId": "A"}],
-      "title": "Services Sending Traces",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "tempo", "uid": "tempo"},
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 12},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 11},
       "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"enablePagination": true},
+        "showHeader": true
+      },
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {"type": "tempo", "uid": "tempo"},
           "queryType": "traceqlSearch",
           "limit": 20,
           "refId": "A",
-          "filters": []
+          "tableType": "traces"
         }
       ],
-      "title": "Recent Traces",
-      "type": "traces"
+      "title": "Recent Traces (click row to view details)",
+      "type": "table",
+      "transformations": []
     }
   ],
   "refresh": "30s",
