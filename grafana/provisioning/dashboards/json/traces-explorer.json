@@ -49,10 +49,10 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 15},
+      "gridPos": {"h": 15, "w": 24, "x": 0, "y": 15},
       "id": 5,
       "options": {
-        "content": "## 🐍 Python Example\n\n```python\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\n\nprovider = TracerProvider()\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=\"<oib-host>:4317\", insecure=True)))\ntrace.set_tracer_provider(provider)\n```\n\nSee the `examples/python-flask` directory for a complete working example.",
+        "content": "## 🐍 Python Example\n\n```python\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\n\n# Set up the tracer provider\nprovider = TracerProvider()\nexporter = OTLPSpanExporter(\n    endpoint=\"<oib-host>:4317\",  # Use oib-alloy-telemetry:4317 from Docker\n    insecure=True\n)\nprovider.add_span_processor(BatchSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\n\n# Get a tracer and create spans\ntracer = trace.get_tracer(__name__)\n\nwith tracer.start_as_current_span(\"my-operation\") as span:\n    span.set_attribute(\"key\", \"value\")\n    # Your code here\n```\n\nSee the `examples/python-flask` directory for a complete working example with Flask instrumentation.",
         "mode": "markdown"
       },
       "title": "Code Example",

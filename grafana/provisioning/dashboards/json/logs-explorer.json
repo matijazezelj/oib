@@ -41,7 +41,7 @@
         "uid": "loki"
       },
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 24,
         "x": 0,
         "y": 4
@@ -70,6 +70,43 @@
         }
       ],
       "title": "All Docker Container Logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{job=\"docker\"} |~ \"(?i)(error|warn|warning|critical|fatal|exception|fail|panic)\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "⚠️ Errors & Warnings",
       "type": "logs"
     },
     {
@@ -132,7 +169,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 28
       },
       "id": 3,
       "options": {
