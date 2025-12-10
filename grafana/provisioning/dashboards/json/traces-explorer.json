@@ -8,10 +8,10 @@
   "liveNow": false,
   "panels": [
     {
-      "gridPos": {"h": 5, "w": 24, "x": 0, "y": 0},
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {
-        "content": "# 🔭 Traces Explorer\n\nDistributed traces are collected via OpenTelemetry and stored in Tempo.\n\n## 👉 [Open Trace Search in Explore](/explore?schemaVersion=1&panes=%7B%22v1b%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceqlSearch%22%2C%22limit%22%3A20%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1)\n\nThe Explore view provides the best experience for searching and analyzing traces.",
+        "content": "# 🔭 Distributed Tracing with Tempo\n\nTraces are collected via OpenTelemetry and stored in Grafana Tempo.\n\n## 👉 [Click here to Search Traces in Explore](/explore?schemaVersion=1&panes=%7B%22v1b%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceqlSearch%22%2C%22limit%22%3A20%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1)\n\nThe **Explore** view provides the best experience for:\n- Searching traces by service, duration, status\n- Viewing trace timelines and span details\n- Correlating traces with logs",
         "mode": "markdown"
       },
       "title": "",
@@ -19,68 +19,47 @@
       "type": "text"
     },
     {
-      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 5},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 7},
       "id": 2,
       "options": {
-        "content": "## 📡 OTLP Endpoints\n\n| Protocol | Endpoint |\n|----------|----------|\n| **gRPC** | `<oib-host>:4317` |\n| **HTTP** | `http://<oib-host>:4318` |",
+        "content": "## 📡 OTLP Endpoints\n\nSend traces to these endpoints:\n\n| Protocol | Endpoint |\n|----------|----------|\n| **gRPC** | `<oib-host>:4317` |\n| **HTTP** | `http://<oib-host>:4318` |\n\nReplace `<oib-host>` with your OIB server IP/hostname.",
         "mode": "markdown"
       },
       "title": "Integration",
       "type": "text"
     },
     {
-      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 5},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 7},
       "id": 3,
       "options": {
-        "content": "## 🔧 Configuration\n\n```bash\n# Set these environment variables in your app\nexport OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318\nexport OTEL_SERVICE_NAME=my-service\n```",
+        "content": "## 🔧 App Configuration\n\nSet these environment variables:\n\n```bash\nexport OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318\nexport OTEL_SERVICE_NAME=my-service\n```\n\nFor Docker containers on oib-network:\n```bash\nOTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4317\n```",
         "mode": "markdown"
       },
       "title": "Environment Variables",
       "type": "text"
     },
     {
-      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 5},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 7},
       "id": 4,
       "options": {
-        "content": "## 📊 TraceQL Examples\n\n```\n# All traces\n{}\n\n# By service name\n{resource.service.name=\"my-app\"}\n\n# Slow requests (>100ms)\n{duration > 100ms}\n\n# Errors only  \n{status = error}\n```",
+        "content": "## 📊 TraceQL Query Examples\n\nUse these in the Explore view:\n\n```sql\n# All traces\n{}\n\n# By service name\n{resource.service.name=\"my-app\"}\n\n# Slow requests (>100ms)\n{duration > 100ms}\n\n# HTTP errors\n{span.http.status_code >= 400}\n\n# Specific operation\n{name = \"GET /api/users\"}\n```",
         "mode": "markdown"
       },
-      "title": "Query Examples",
+      "title": "TraceQL Examples",
       "type": "text"
     },
     {
-      "datasource": {"type": "tempo", "uid": "tempo"},
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
-        },
-        "overrides": []
-      },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 11},
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 15},
       "id": 5,
       "options": {
-        "cellHeight": "sm",
-        "footer": {"enablePagination": true},
-        "showHeader": true
+        "content": "## 🐍 Python Example\n\n```python\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\n\nprovider = TracerProvider()\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=\"<oib-host>:4317\", insecure=True)))\ntrace.set_tracer_provider(provider)\n```\n\nSee the `examples/python-flask` directory for a complete working example.",
+        "mode": "markdown"
       },
-      "pluginVersion": "11.3.1",
-      "targets": [
-        {
-          "datasource": {"type": "tempo", "uid": "tempo"},
-          "queryType": "traceqlSearch",
-          "limit": 20,
-          "refId": "A",
-          "tableType": "traces"
-        }
-      ],
-      "title": "Recent Traces (click row to view details)",
-      "type": "table",
-      "transformations": []
+      "title": "Code Example",
+      "type": "text"
     }
   ],
-  "refresh": "30s",
+  "refresh": false,
   "schemaVersion": 38,
   "tags": ["oib", "telemetry", "tempo", "tracing"],
   "templating": {"list": []},
