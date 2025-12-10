@@ -26,10 +26,11 @@ const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventi
 
 const sdk = new NodeSDK({
   resource: new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: 'example-express-app',
+    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME || 'example-express-app',
   }),
   traceExporter: new OTLPTraceExporter({
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'grpc://localhost:4317',
+    // gRPC exporter expects host:port without scheme
+    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'localhost:4317',
   }),
   instrumentations: [getNodeAutoInstrumentations()],
 });

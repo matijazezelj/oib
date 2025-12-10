@@ -69,4 +69,38 @@ networks:
 This allows your app to communicate with OIB services using internal hostnames:
 - Loki: `oib-loki:3100`
 - Prometheus: `oib-prometheus:9090`
-- Tempo: `oib-tempo:4317`
+- Tempo (via Alloy): `oib-alloy-telemetry:4317` (gRPC) or `oib-alloy-telemetry:4318` (HTTP)
+
+## Complete Examples
+
+### Python Flask (`python-flask/`)
+
+A fully instrumented Flask application with:
+- **Logs**: Sent via stdout (collected by Alloy)
+- **Metrics**: Exposed on `/metrics` endpoint
+- **Traces**: Sent via OpenTelemetry to Tempo
+
+```bash
+cd python-flask
+docker compose up -d
+# Visit http://localhost:5001
+```
+
+### Node.js Express (`node-express/`)
+
+A fully instrumented Express application with:
+- **Logs**: Sent via pino (collected by Alloy)
+- **Metrics**: Exposed on `/metrics` endpoint via prom-client
+- **Traces**: Sent via OpenTelemetry to Tempo
+
+```bash
+cd node-express
+docker compose up -d
+# Visit http://localhost:3003
+```
+
+Both examples demonstrate:
+- Automatic trace context propagation
+- Custom spans and attributes
+- Error tracking
+- Request duration metrics
