@@ -44,7 +44,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 12
       },
       "id": 2,
       "options": {
@@ -81,7 +81,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 24
       },
       "id": 4,
       "options": {
@@ -101,7 +101,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{job=\"docker\"} |~ \"(?i)(error|warn|warning|critical|fatal|exception|fail|panic)\"",
+          "expr": "{job=\"docker\"} | detected_level=~\"warn|warning|error|critical|fatal\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -169,7 +169,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 4
       },
       "id": 3,
       "options": {
