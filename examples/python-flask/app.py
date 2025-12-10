@@ -32,10 +32,12 @@ from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.sdk.resources import Resource
 
 # Configure tracer
-resource = Resource.create({"service.name": "example-flask-app"})
+import os
+otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+resource = Resource.create({"service.name": os.environ.get("OTEL_SERVICE_NAME", "example-flask-app")})
 provider = TracerProvider(resource=resource)
 processor = BatchSpanProcessor(OTLPSpanExporter(
-    endpoint="localhost:4317",
+    endpoint=otel_endpoint,
     insecure=True
 ))
 provider.add_span_processor(processor)
