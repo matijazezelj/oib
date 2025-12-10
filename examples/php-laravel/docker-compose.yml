@@ -10,7 +10,7 @@ services:
       - APP_ENV=production
       - APP_DEBUG=false
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
-      - OTEL_SERVICE_NAME=example-laravel-app
+      - OTEL_SERVICE_NAME=example-php-app
     networks:
       - oib-network
     restart: unless-stopped

@@ -69,5 +69,5 @@ error_log(json_encode([
     'timestamp' => date('c'),
     'level' => 'info',
     'message' => '[metrics] Prometheus metrics initialized',
-    'service' => 'example-laravel-app',
+    'service' => 'example-php-app',
 ]));
