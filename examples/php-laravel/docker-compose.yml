@@ -1,0 +1,35 @@
+name: example-php-laravel
+
+services:
+  php-laravel-app:
+    build: .
+    container_name: example-php-laravel
+    ports:
+      - "3005:8000"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
+      - OTEL_SERVICE_NAME=example-laravel-app
+    networks:
+      - oib-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  oib-network:
+    external: true

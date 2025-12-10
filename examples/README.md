@@ -254,6 +254,65 @@ end
 
 ---
 
+### PHP Laravel (`php-laravel/`)
+
+A lightweight PHP application with OpenTelemetry tracing, Prometheus metrics, and structured JSON logging.
+
+**Features:**
+- **Logs**: Structured JSON logging to stdout (collected by Alloy)
+- **Metrics**: Prometheus metrics via simple PHP implementation
+- **Traces**: OpenTelemetry with OTLP HTTP exporter
+
+**Endpoints:**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Home page - returns welcome message |
+| `GET /api/data` | Simulates processing with random delay (50-500ms) |
+| `GET /api/error` | Triggers an intentional error for testing |
+| `GET /metrics` | Prometheus metrics endpoint |
+| `GET /health` | Health check endpoint |
+
+**Run:**
+```bash
+cd php-laravel
+docker compose up -d
+# App available at http://localhost:3005
+```
+
+**Key Files:**
+- `public/index.php` - Main application with routing
+- `bootstrap/tracing.php` - OpenTelemetry setup
+- `bootstrap/metrics.php` - Prometheus metrics setup
+- `docker-compose.yml` - Container configuration with OIB network
+
+**Dependencies (composer.json):**
+```json
+{
+  "require": {
+    "open-telemetry/sdk": "^1.0",
+    "open-telemetry/exporter-otlp": "^1.0",
+    "promphp/prometheus_client_php": "^2.6"
+  }
+}
+```
+
+**HTTP Exporter Configuration:**
+
+PHP's OpenTelemetry uses the HTTP exporter:
+
+```php
+use OpenTelemetry\Contrib\Otlp\SpanExporter;
+use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
+
+$transport = (new OtlpHttpTransportFactory())->create(
+    $otelEndpoint . '/v1/traces',
+    'application/json'
+);
+$exporter = new SpanExporter($transport);
+```
+
+---
+
 ## What All Examples Demonstrate
 
 - ✅ Automatic trace context propagation
@@ -265,7 +324,7 @@ end
 
 ## Viewing in Grafana
 
-1. **Logs**: Explore → Loki → `{service_name="example-flask-app"}` or `{service_name="example-express-app"}` or `{service_name="example-rails-app"}`
+1. **Logs**: Explore → Loki → `{service_name="example-flask-app"}` or `{service_name="example-express-app"}` or `{service_name="example-rails-app"}` or `{service_name="example-laravel-app"}`
 2. **Traces**: Explore → Tempo → Search by service name
 3. **Trace-to-Log**: Click a trace in Tempo → "Logs for this span" to see correlated logs
 4. **Metrics**: Explore → Prometheus → Query app metrics
@@ -301,5 +360,12 @@ for i in {1..10}; do
   curl -s http://localhost:3004/
   curl -s http://localhost:3004/api/data
   curl -s http://localhost:3004/api/error 2>/dev/null
+done
+
+# Generate traffic to Laravel app
+for i in {1..10}; do
+  curl -s http://localhost:3005/
+  curl -s http://localhost:3005/api/data
+  curl -s http://localhost:3005/api/error 2>/dev/null
 done
 ```

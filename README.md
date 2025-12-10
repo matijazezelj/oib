@@ -65,7 +65,7 @@ OIB comes with three ready-to-use dashboards:
 |-----------|-------------|
 | **System Overview** | Host metrics, container CPU/memory, disk usage |
 | **Logs Explorer** | Log volume, live logs, errors/warnings panel |
-| **Traces Explorer** | TraceQL examples, Python, Node.js & Ruby code samples |
+| **Traces Explorer** | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
 
 ## ⚙️ Configuration
 
@@ -173,7 +173,8 @@ oib/
     ├── README.md               # Example integration guide
     ├── python-flask/           # Python Flask example app
     ├── node-express/           # Node.js Express example app
-    └── ruby-rails/             # Ruby on Rails example app
+    ├── ruby-rails/             # Ruby on Rails example app
+    └── php-laravel/            # PHP Laravel example app
 ```
 
 ## 🔧 Configuration
@@ -238,7 +239,7 @@ const exporter = new OTLPTraceExporter({
 });
 ```
 
-> 💡 See `examples/` for complete working Python Flask, Node.js Express, and Ruby on Rails apps with full observability.
+> 💡 See `examples/` for complete working Python Flask, Node.js Express, Ruby on Rails, and PHP apps with full observability.
 
 ## 🌐 Network
 
