@@ -81,7 +81,7 @@
       "gridPos": {"h": 6, "w": 6, "x": 18, "y": 3},
       "id": 5,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
-      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "count(container_last_seen{id=~\".*docker.*\"})", "refId": "A"}],
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "count(container_last_seen{name!=\"\"})", "refId": "A"}],
       "title": "Running Containers",
       "type": "stat"
     },
@@ -132,7 +132,7 @@
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 17},
       "id": 8,
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (id) (rate(container_cpu_usage_seconds_total{id=~\".*docker.*\"}[5m]))", "legendFormat": "{{id}}", "refId": "A"}],
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]))", "legendFormat": "{{name}}", "refId": "A"}],
       "title": "Container CPU Usage",
       "type": "timeseries"
     },
@@ -148,7 +148,7 @@
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 25},
       "id": 9,
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "container_memory_usage_bytes{id=~\".*docker.*\"}", "legendFormat": "{{id}}", "refId": "A"}],
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "container_memory_usage_bytes{name!=\"\"}", "legendFormat": "{{name}}", "refId": "A"}],
       "title": "Container Memory Usage",
       "type": "timeseries"
     }

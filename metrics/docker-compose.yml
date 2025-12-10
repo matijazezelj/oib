@@ -63,9 +63,13 @@ services:
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+    command:
+      - '--docker_only=true'
+      - '--store_container_labels=true'
     privileged: true
     devices:
       - /dev/kmsg
