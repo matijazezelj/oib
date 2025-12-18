@@ -2,6 +2,16 @@
 
 This directory contains examples showing how to integrate your applications with the OIB observability stack.
 
+## Quick Install (Recommended)
+
+From the repo root, you can use the quick install script to set up the stack, create `.env` if missing, and create the `oib-network` Docker network:
+
+```bash
+./install-quick.sh
+```
+
+This script checks Docker/Compose/Make, generates a Grafana password if the default placeholder is present in `.env`, and runs `make install`.
+
 ## One-Command Demo
 
 From the repo root, you can start all example apps and generate traffic:
