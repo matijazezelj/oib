@@ -5,7 +5,8 @@
         uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry \
         status info info-grafana info-logging info-metrics info-telemetry \
         logs logs-grafana logs-logging logs-metrics logs-telemetry \
-        network
+        network health doctor check-ports update clean ps validate \
+        open disk-usage version demo
 
 # Colors
 CYAN := \033[36m
@@ -34,6 +35,15 @@ help: ## Show this help message
 	@echo "$(CYAN)Management:$(RESET)"
 	@grep -E '^(start|stop|restart|status|info|logs)[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)Health & Diagnostics:$(RESET)"
+	@grep -E '^(health|doctor|check-ports|ps|validate):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(CYAN)Utilities:$(RESET)"
+	@grep -E '^(open|disk-usage|version|demo):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(CYAN)Maintenance:$(RESET)"
+	@grep -E '^(update|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)Cleanup:$(RESET)"
 	@grep -E '^uninstall[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
@@ -45,16 +55,43 @@ help: ## Show this help message
 # ==================== Network ====================
 
 network: ## Create shared Docker network
+	@docker info >/dev/null 2>&1 || (echo "$(RED)✗ Docker is not running. Please start Docker first.$(RESET)" && exit 1)
 	@docker network inspect oib-network >/dev/null 2>&1 || \
 		(docker network create oib-network && echo "$(GREEN)✓ Created oib-network$(RESET)")
 
 # ==================== Installation ====================
 
-install: network install-logging install-metrics install-telemetry install-grafana ## Install all observability stacks
+install: network ## Install all observability stacks
+	@if [ ! -f .env ]; then \
+		echo "$(YELLOW)! No .env file found. Creating from .env.example...$(RESET)"; \
+		cp .env.example .env; \
+		echo "$(YELLOW)! Please edit .env and set a secure GRAFANA_ADMIN_PASSWORD$(RESET)"; \
+		echo ""; \
+	fi
+	@if grep -q "CHANGE_ME" .env 2>/dev/null; then \
+		echo "$(YELLOW)$(BOLD)⚠️  WARNING: Default password detected in .env$(RESET)"; \
+		echo "$(YELLOW)   Please change GRAFANA_ADMIN_PASSWORD before production use$(RESET)"; \
+		echo ""; \
+	fi
+	@$(MAKE) --no-print-directory install-logging
+	@$(MAKE) --no-print-directory install-metrics
+	@$(MAKE) --no-print-directory install-telemetry
+	@$(MAKE) --no-print-directory install-grafana
 	@echo ""
-	@echo "$(GREEN)$(BOLD)✓ All stacks installed successfully!$(RESET)"
+	@echo "$(GREEN)$(BOLD)════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(GREEN)$(BOLD)              ✓ OIB installed successfully!$(RESET)"
+	@echo "$(GREEN)$(BOLD)════════════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@$(MAKE) --no-print-directory info
+	@echo "  $(BOLD)Open Grafana:$(RESET)       $(YELLOW)http://localhost:3000$(RESET)"
+	@echo "  $(BOLD)Send traces to:$(RESET)     $(YELLOW)localhost:4317$(RESET) (gRPC) or $(YELLOW)localhost:4318$(RESET) (HTTP)"
+	@echo "  $(BOLD)Push metrics to:$(RESET)    $(YELLOW)http://localhost:9091$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Next steps:$(RESET)"
+	@echo "  $(GREEN)make demo$(RESET)      Generate sample data to explore"
+	@echo "  $(GREEN)make open$(RESET)      Open Grafana in browser"
+	@echo "  $(GREEN)make health$(RESET)    Verify all services are healthy"
+	@echo "  $(GREEN)make info$(RESET)      Show all integration endpoints"
+	@echo ""
 
 install-grafana: network ## Install Grafana (unified dashboard)
 	@echo "$(CYAN)📊 Installing Grafana...$(RESET)"
@@ -129,7 +166,14 @@ restart-telemetry: ## Restart telemetry stack
 
 # ==================== Uninstall ====================
 
-uninstall: uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry ## Remove all stacks and volumes
+uninstall: ## Remove all stacks and volumes (with confirmation)
+	@echo "$(RED)$(BOLD)⚠️  WARNING: This will delete ALL data (logs, metrics, traces)!$(RESET)"
+	@echo ""
+	@read -p "Are you sure you want to uninstall? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@$(MAKE) --no-print-directory uninstall-grafana
+	@$(MAKE) --no-print-directory uninstall-logging
+	@$(MAKE) --no-print-directory uninstall-metrics
+	@$(MAKE) --no-print-directory uninstall-telemetry
 	@docker network rm oib-network 2>/dev/null || true
 	@echo "$(GREEN)✓ All stacks removed$(RESET)"
 
@@ -155,19 +199,63 @@ uninstall-telemetry: ## Remove telemetry stack and volumes
 
 # ==================== Status ====================
 
-status: ## Show status of all stacks
+status: ## Show status of all stacks with health indicators
 	@echo ""
-	@echo "$(BOLD)📊 Grafana$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "  Not installed"
+	@echo "$(BOLD)🔭 OIB Stack Status$(RESET)"
 	@echo ""
-	@echo "$(BOLD)📋 Logging Stack$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "  Not installed"
-	@echo ""
-	@echo "$(BOLD)📈 Metrics Stack$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "  Not installed"
-	@echo ""
-	@echo "$(BOLD)🔭 Telemetry Stack$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "  Not installed"
+	@printf "  %-20s %-12s %s\n" "SERVICE" "STATUS" "HEALTH"
+	@echo "  ────────────────────────────────────────────────"
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-grafana; then \
+		health=$$(curl -sf http://localhost:3000/api/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Grafana" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Grafana" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-loki; then \
+		health=$$(curl -sf http://localhost:3100/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Loki" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Loki" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-alloy-logging; then \
+		health=$$(curl -sf http://localhost:12345/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (logging)" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (logging)" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-prometheus; then \
+		health=$$(curl -sf http://localhost:9090/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Prometheus" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Prometheus" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-pushgateway; then \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Pushgateway" "running" "$(GREEN)✓ healthy$(RESET)"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Pushgateway" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-node-exporter; then \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Node Exporter" "running" "$(GREEN)✓ healthy$(RESET)"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Node Exporter" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-cadvisor; then \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "cAdvisor" "running" "$(GREEN)✓ healthy$(RESET)"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "cAdvisor" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-tempo; then \
+		health=$$(curl -sf http://localhost:3200/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Tempo" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Tempo" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-alloy-telemetry; then \
+		health=$$(curl -sf http://localhost:12346/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (telemetry)" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (telemetry)" "stopped"; \
+	fi
 	@echo ""
 
 # ==================== Info ====================
@@ -189,7 +277,7 @@ info-grafana: ## Show Grafana info
 	@echo ""
 	@echo "$(GREEN)Dashboard:$(RESET)"
 	@echo "  URL:      $(YELLOW)http://localhost:3000$(RESET)"
-	@echo "  Login:    admin / admin"
+	@echo "  Login:    $(CYAN)See .env file for credentials$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Datasources:$(RESET)"
 	@echo "  • Loki (logs)"
@@ -264,3 +352,173 @@ logs-metrics: ## Tail metrics stack logs
 
 logs-telemetry: ## Tail telemetry stack logs
 	@cd telemetry && $(DOCKER_COMPOSE) logs -f
+
+# ==================== Health & Diagnostics ====================
+
+health: ## Quick health check of all services
+	@echo ""
+	@echo "$(BOLD)🏥 Health Check$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Grafana:$(RESET)"
+	@curl -sf http://localhost:3000/api/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Grafana is healthy" || echo "  $(RED)✗$(RESET) Grafana is not responding"
+	@echo ""
+	@echo "$(CYAN)Logging:$(RESET)"
+	@curl -sf http://localhost:3100/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Loki is healthy" || echo "  $(RED)✗$(RESET) Loki is not responding"
+	@curl -sf http://localhost:12345/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (logging) is healthy" || echo "  $(RED)✗$(RESET) Alloy (logging) is not responding"
+	@echo ""
+	@echo "$(CYAN)Metrics:$(RESET)"
+	@curl -sf http://localhost:9090/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Prometheus is healthy" || echo "  $(RED)✗$(RESET) Prometheus is not responding"
+	@curl -sf http://localhost:9091/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Pushgateway is healthy" || echo "  $(RED)✗$(RESET) Pushgateway is not responding"
+	@echo ""
+	@echo "$(CYAN)Telemetry:$(RESET)"
+	@curl -sf http://localhost:3200/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Tempo is healthy" || echo "  $(RED)✗$(RESET) Tempo is not responding"
+	@curl -sf http://localhost:12346/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (telemetry) is healthy" || echo "  $(RED)✗$(RESET) Alloy (telemetry) is not responding"
+	@echo ""
+
+doctor: ## Diagnose common issues (Docker, ports, config)
+	@echo ""
+	@echo "$(BOLD)🩺 OIB Doctor$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Checking Docker...$(RESET)"
+	@docker info >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Docker is running" || echo "  $(RED)✗$(RESET) Docker is not running"
+	@docker compose version >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Docker Compose is available" || echo "  $(RED)✗$(RESET) Docker Compose not found"
+	@echo ""
+	@echo "$(CYAN)Checking configuration...$(RESET)"
+	@test -f .env && echo "  $(GREEN)✓$(RESET) .env file exists" || echo "  $(YELLOW)!$(RESET) .env file missing (copy from .env.example)"
+	@if [ -f .env ]; then \
+		grep -q "CHANGE_ME" .env && echo "  $(YELLOW)!$(RESET) Password not changed in .env (security risk)" || echo "  $(GREEN)✓$(RESET) Password has been customized"; \
+	fi
+	@echo ""
+	@echo "$(CYAN)Checking network...$(RESET)"
+	@docker network inspect oib-network >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) oib-network exists" || echo "  $(YELLOW)!$(RESET) oib-network not created (run 'make install')"
+	@echo ""
+	@echo "$(CYAN)Checking ports...$(RESET)"
+	@$(MAKE) --no-print-directory check-ports
+	@echo ""
+
+check-ports: ## Check if required ports are available
+	@for port in 3000 3100 9090 9091 4317 4318; do \
+		if lsof -i :$$port >/dev/null 2>&1; then \
+			echo "  $(YELLOW)!$(RESET) Port $$port is in use"; \
+		else \
+			echo "  $(GREEN)✓$(RESET) Port $$port is available"; \
+		fi; \
+	done
+
+ps: ## Show running OIB containers
+	@echo ""
+	@docker ps --filter "network=oib-network" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+	@echo ""
+
+validate: ## Validate configuration files
+	@echo ""
+	@echo "$(BOLD)🔍 Validating configuration files...$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Checking YAML syntax...$(RESET)"
+	@for file in logging/config/loki-config.yml metrics/config/prometheus.yml grafana/provisioning/datasources/datasources.yml; do \
+		if [ -f "$$file" ]; then \
+			docker run --rm -v "$(PWD)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1 && \
+			echo "  $(GREEN)✓$(RESET) $$file" || echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
+		fi; \
+	done
+	@echo ""
+	@echo "$(CYAN)Checking Docker Compose files...$(RESET)"
+	@for dir in grafana logging metrics telemetry; do \
+		cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null && echo "  $(GREEN)✓$(RESET) $$dir/docker-compose.yml" || echo "  $(RED)✗$(RESET) $$dir/docker-compose.yml has errors"; \
+		cd ..; \
+	done
+	@echo ""
+
+# ==================== Maintenance ====================
+
+update: ## Pull latest images and restart all stacks
+	@echo "$(CYAN)Pulling latest images...$(RESET)"
+	@cd grafana && $(DOCKER_COMPOSE) pull
+	@cd logging && $(DOCKER_COMPOSE) pull
+	@cd metrics && $(DOCKER_COMPOSE) pull
+	@cd telemetry && $(DOCKER_COMPOSE) pull
+	@echo ""
+	@echo "$(CYAN)Restarting stacks with new images...$(RESET)"
+	@$(MAKE) --no-print-directory restart
+	@echo ""
+	@echo "$(GREEN)✓ All stacks updated$(RESET)"
+
+clean: ## Remove unused Docker resources (images, networks, volumes)
+	@echo "$(CYAN)Cleaning up unused Docker resources...$(RESET)"
+	@docker system prune -f
+	@echo "$(GREEN)✓ Cleanup complete$(RESET)"
+
+# ==================== Utilities ====================
+
+open: ## Open Grafana dashboard in browser
+	@echo "$(CYAN)Opening Grafana in browser...$(RESET)"
+	@if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then \
+		if command -v xdg-open >/dev/null 2>&1; then \
+			xdg-open http://localhost:3000 2>/dev/null; \
+		elif command -v open >/dev/null 2>&1; then \
+			open http://localhost:3000; \
+		else \
+			echo "$(YELLOW)Could not detect browser. Open manually: http://localhost:3000$(RESET)"; \
+		fi; \
+	else \
+		echo "$(RED)Grafana is not running. Run 'make install' first.$(RESET)"; \
+	fi
+
+disk-usage: ## Show disk space used by OIB volumes
+	@echo ""
+	@echo "$(BOLD)💾 OIB Disk Usage$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Docker Volumes:$(RESET)"
+	@docker system df -v 2>/dev/null | grep -E "oib-|VOLUME" | head -20 || echo "  No OIB volumes found"
+	@echo ""
+	@echo "$(CYAN)Total Docker disk usage:$(RESET)"
+	@docker system df 2>/dev/null
+	@echo ""
+
+version: ## Show versions of all OIB components
+	@echo ""
+	@echo "$(BOLD)📦 OIB Component Versions$(RESET)"
+	@echo ""
+	@printf "  %-20s %s\n" "COMPONENT" "VERSION"
+	@echo "  ────────────────────────────────────────"
+	@docker inspect oib-grafana --format '  Grafana              {{.Config.Image}}' 2>/dev/null || echo "  Grafana              (not running)"
+	@docker inspect oib-loki --format '  Loki                 {{.Config.Image}}' 2>/dev/null || echo "  Loki                 (not running)"
+	@docker inspect oib-prometheus --format '  Prometheus           {{.Config.Image}}' 2>/dev/null || echo "  Prometheus           (not running)"
+	@docker inspect oib-tempo --format '  Tempo                {{.Config.Image}}' 2>/dev/null || echo "  Tempo                (not running)"
+	@docker inspect oib-alloy-logging --format '  Alloy (logging)      {{.Config.Image}}' 2>/dev/null || echo "  Alloy (logging)      (not running)"
+	@docker inspect oib-alloy-telemetry --format '  Alloy (telemetry)    {{.Config.Image}}' 2>/dev/null || echo "  Alloy (telemetry)    (not running)"
+	@docker inspect oib-pushgateway --format '  Pushgateway          {{.Config.Image}}' 2>/dev/null || echo "  Pushgateway          (not running)"
+	@docker inspect oib-node-exporter --format '  Node Exporter        {{.Config.Image}}' 2>/dev/null || echo "  Node Exporter        (not running)"
+	@docker inspect oib-cadvisor --format '  cAdvisor             {{.Config.Image}}' 2>/dev/null || echo "  cAdvisor             (not running)"
+	@echo ""
+
+demo: ## Generate sample data to demonstrate all stacks
+	@echo ""
+	@echo "$(BOLD)🎬 Generating demo data...$(RESET)"
+	@echo ""
+	@echo "$(CYAN)1. Generating logs...$(RESET)"
+	@for i in 1 2 3 4 5; do \
+		docker run --rm --network oib-network --log-driver json-file alpine echo "Demo log message $$i from OIB at $$(date)"; \
+	done
+	@echo "   $(GREEN)✓$(RESET) Created 5 log entries"
+	@echo ""
+	@echo "$(CYAN)2. Pushing sample metrics...$(RESET)"
+	@echo "oib_demo_counter 42" | curl -s --data-binary @- http://localhost:9091/metrics/job/oib_demo >/dev/null 2>&1 && \
+		echo "   $(GREEN)✓$(RESET) Pushed metric to Pushgateway" || \
+		echo "   $(RED)✗$(RESET) Could not push metrics (is Pushgateway running?)"
+	@echo ""
+	@echo "$(CYAN)3. Sending sample trace...$(RESET)"
+	@curl -s -X POST http://localhost:4318/v1/traces \
+		-H "Content-Type: application/json" \
+		-d '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"oib-demo"}}]},"scopeSpans":[{"spans":[{"traceId":"00000000000000000000000000000001","spanId":"0000000000000001","name":"demo-span","kind":1,"startTimeUnixNano":"1234567890000000000","endTimeUnixNano":"1234567891000000000"}]}]}]}' \
+		>/dev/null 2>&1 && \
+		echo "   $(GREEN)✓$(RESET) Sent trace to Tempo" || \
+		echo "   $(RED)✗$(RESET) Could not send trace (is Tempo running?)"
+	@echo ""
+	@echo "$(GREEN)$(BOLD)Demo complete!$(RESET) Open Grafana to see the data:"
+	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo ""
+	@echo "  • $(CYAN)Logs:$(RESET)    Explore → Loki → Run query: {}"
+	@echo "  • $(CYAN)Metrics:$(RESET) Explore → Prometheus → oib_demo_counter"
+	@echo "  • $(CYAN)Traces:$(RESET)  Explore → Tempo → Search for 'oib-demo'"
+	@echo ""

@@ -1,22 +1,86 @@
 # Observability in a Box (OIB)
 
 A plug-and-play observability stack for homelab users. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
+> **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!
+## � Prerequisites
+
+Before you begin, ensure you have:
+
+- **Docker** 20.10+ ([Install Docker](https://docs.docker.com/get-docker/))
+- **Docker Compose** v2+ (included with Docker Desktop)
+- **Make** (pre-installed on macOS/Linux, [Windows](https://gnuwin32.sourceforge.net/packages/make.htm))
+- **2GB+ RAM** recommended
+- **curl** for health checks (pre-installed on most systems)
+
+Verify your setup:
+```bash
+docker --version     # Should be 20.10+
+docker compose version  # Should be v2+
+make --version
+```
 
 ## 🚀 Quick Start
 
 ```bash
 # Clone the repo
-git clone <repo-url> oib && cd oib
+git clone https://github.com/matijazezelj/oib.git && cd oib
+
+# Configure credentials (required)
+cp .env.example .env
+# Edit .env and set a secure GRAFANA_ADMIN_PASSWORD
 
 # Install all stacks
 make install
 
-# Or install individual stacks
+# Verify installation
+make health
+```
+
+**Alternative installation methods:**
+```bash
+# Quick install script (auto-creates .env)
+./install-quick.sh
+
+# Install individual stacks only
 make install-logging    # Loki + Alloy
 make install-metrics    # Prometheus + Node Exporter + cAdvisor
 make install-telemetry  # Tempo + Alloy
 make install-grafana    # Unified Grafana with all datasources
 ```
+
+### ✅ Verify Installation
+
+After installation, verify everything is working:
+
+```bash
+# Check health of all services
+make health
+
+# Expected output: all services show ✓
+# 🏥 Health Check
+# Grafana:
+#   ✓ Grafana is healthy
+# Logging:
+#   ✓ Loki is healthy
+#   ✓ Alloy (logging) is healthy
+# ...
+```
+
+Then open **http://localhost:3000** in your browser and log in with credentials from your `.env` file.
+
+### 🎬 Try It Out
+
+After installation, generate some demo data to see everything working:
+
+```bash
+# Generate sample logs, metrics, and traces
+make demo
+
+# Open Grafana in your browser
+make open
+```
+
+This creates sample data across all three pillars so you can immediately explore the dashboards.
 
 ## 📦 What's Included
 
@@ -107,37 +171,33 @@ make install-metrics      # Install metrics stack only
 make install-telemetry    # Install telemetry stack only
 make install-grafana      # Install unified Grafana
 
-# Status & Info
-make status               # Show status of all stacks
-make info                 # Show integration endpoints for all stacks
-make info-logging         # Show logging integration info
-make info-metrics         # Show metrics integration info
-make info-telemetry       # Show telemetry integration info
-make info-grafana         # Show Grafana info
+# Health & Diagnostics
+make health               # Quick health check of all services
+make doctor               # Diagnose common issues (Docker, ports, config)
+make status               # Show all services with health indicators
+make check-ports          # Check if required ports are available
+make ps                   # Show running OIB containers
+make validate             # Validate configuration files
+
+# Utilities
+make open                 # Open Grafana in browser
+make demo                 # Generate sample data (logs, metrics, traces)
+make disk-usage           # Show disk space used by OIB
+make version              # Show versions of running components
 
 # Management
 make stop                 # Stop all stacks
-make stop-logging         # Stop logging stack
-make stop-metrics         # Stop metrics stack
-make stop-telemetry       # Stop telemetry stack
-make stop-grafana         # Stop Grafana
-
 make start                # Start all stacks
 make restart              # Restart all stacks
+make info                 # Show integration endpoints
+
+# Maintenance
+make update               # Pull latest images and restart
+make clean                # Remove unused Docker resources
+make logs                 # Tail logs from all stacks
 
 # Cleanup
-make uninstall            # Remove all stacks and volumes
-make uninstall-logging    # Remove logging stack
-make uninstall-metrics    # Remove metrics stack
-make uninstall-telemetry  # Remove telemetry stack
-make uninstall-grafana    # Remove Grafana
-
-# Logs
-make logs                 # Tail logs from all stacks
-make logs-logging         # Tail logging stack logs
-make logs-metrics         # Tail metrics stack logs
-make logs-telemetry       # Tail telemetry stack logs
-make logs-grafana         # Tail Grafana logs
+make uninstall            # Remove all stacks and volumes (with confirmation)
 ```
 
 ## 📁 Project Structure
@@ -276,12 +336,117 @@ Default retention policies (adjust in config files based on storage):
 2. **Resource limits**: Adjust memory/CPU limits in docker-compose files for your hardware
 3. **Ports**: Default ports can be changed via environment variables (see `.env.example`)
 
-## 📋 Requirements
+## � Troubleshooting
 
-- Docker 20.10+
-- Docker Compose v2+
-- Make
-- 2GB+ RAM recommended
+### Common Issues
+
+<details>
+<summary><b>Docker is not running</b></summary>
+
+```bash
+# Check Docker status
+docker info
+
+# macOS: Start Docker Desktop from Applications
+# Linux: sudo systemctl start docker
+```
+</details>
+
+<details>
+<summary><b>Port already in use</b></summary>
+
+```bash
+# Check which ports are in use
+make check-ports
+
+# Find what's using a specific port
+lsof -i :3000
+
+# Change ports in .env file
+GRAFANA_PORT=3001
+```
+</details>
+
+<details>
+<summary><b>Services not healthy</b></summary>
+
+```bash
+# Run diagnostics
+make doctor
+
+# Check service logs
+make logs-grafana
+make logs-logging
+make logs-metrics
+make logs-telemetry
+
+# Restart services
+make restart
+```
+</details>
+
+<details>
+<summary><b>Permission denied (Linux)</b></summary>
+
+```bash
+# Add your user to docker group
+sudo usermod -aG docker $USER
+
+# Log out and back in, or run:
+newgrp docker
+```
+</details>
+
+<details>
+<summary><b>Traces not appearing in Tempo</b></summary>
+
+```bash
+# Verify OTLP endpoint is accessible
+curl -v http://localhost:4318/v1/traces
+
+# Check Alloy telemetry logs
+make logs-telemetry
+
+# Ensure your app uses correct endpoint:
+# - From host: localhost:4317 (gRPC) or localhost:4318 (HTTP)
+# - From Docker: oib-alloy-telemetry:4317 on oib-network
+```
+</details>
+
+<details>
+<summary><b>Logs not appearing in Loki</b></summary>
+
+```bash
+# Verify Loki is ready
+curl http://localhost:3100/ready
+
+# Check Alloy logging pipeline
+curl http://localhost:12345/metrics | grep loki
+
+# Ensure containers are on oib-network for auto-collection
+docker network inspect oib-network
+```
+</details>
+
+<details>
+<summary><b>High memory usage</b></summary>
+
+```bash
+# Check container resource usage
+docker stats
+
+# Reduce retention in config files:
+# - logging/config/loki-config.yml: retention_period
+# - telemetry/config/tempo.yaml: block_retention
+# - metrics/docker-compose.yml: --storage.tsdb.retention.size
+```
+</details>
+
+### Still having issues?
+
+1. Run `make doctor` for automated diagnostics
+2. Check `make logs` for error messages
+3. [Open an issue](https://github.com/matijazezelj/oib/issues) with the output of `make doctor`
 
 ## 🤝 Contributing
 
