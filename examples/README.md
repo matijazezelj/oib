@@ -2,6 +2,14 @@
 
 This directory contains examples showing how to integrate your applications with the OIB observability stack.
 
+## One-Command Demo
+
+From the repo root, you can start all example apps and generate traffic:
+
+```bash
+make demo-examples
+```
+
 ## Quick Integration
 
 ### 1. Add logging to your containers

@@ -6,7 +6,7 @@
         status info info-grafana info-logging info-metrics info-telemetry \
         logs logs-grafana logs-logging logs-metrics logs-telemetry \
         network health doctor check-ports update clean ps validate \
-        open disk-usage version demo
+        open disk-usage version demo demo-examples bootstrap
 
 # Colors
 CYAN := \033[36m
@@ -39,7 +39,7 @@ help: ## Show this help message
 	@grep -E '^(health|doctor|check-ports|ps|validate):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
-	@grep -E '^(open|disk-usage|version|demo):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(open|disk-usage|version|demo|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
 	@grep -E '^(update|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -522,3 +522,53 @@ demo: ## Generate sample data to demonstrate all stacks
 	@echo "  • $(CYAN)Metrics:$(RESET) Explore → Prometheus → oib_demo_counter"
 	@echo "  • $(CYAN)Traces:$(RESET)  Explore → Tempo → Search for 'oib-demo'"
 	@echo ""
+
+demo-examples: ## Run example apps and generate traffic for all languages
+	@echo ""
+	@echo "$(BOLD)🧪 Running example apps...$(RESET)"
+	@echo ""
+	@$(MAKE) --no-print-directory network
+	@for dir in examples/python-flask examples/node-express examples/ruby-rails examples/php-laravel; do \
+		echo "$(CYAN)Starting $$dir...$(RESET)"; \
+		cd $$dir && $(DOCKER_COMPOSE) up -d; \
+		cd - >/dev/null; \
+	done
+	@echo ""
+	@echo "$(CYAN)Waiting for apps to be ready...$(RESET)"
+	@for url in http://localhost:5000/health http://localhost:3003/health http://localhost:3004/health http://localhost:3005/health; do \
+		ok=false; \
+		for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
+			if curl -sf $$url >/dev/null 2>&1; then ok=true; break; fi; \
+			sleep 1; \
+		done; \
+		if [ "$$ok" = "true" ]; then \
+			echo "  $(GREEN)✓$(RESET) $$url"; \
+		else \
+			echo "  $(YELLOW)!$(RESET) $$url not responding (continuing)"; \
+		fi; \
+	done
+	@echo ""
+	@echo "$(CYAN)Generating traffic...$(RESET)"
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		curl -s http://localhost:5000/ >/dev/null; \
+		curl -s http://localhost:5000/api/data >/dev/null; \
+		curl -s http://localhost:5000/api/error >/dev/null 2>&1 || true; \
+		curl -s http://localhost:3003/ >/dev/null; \
+		curl -s http://localhost:3003/api/data >/dev/null; \
+		curl -s http://localhost:3003/api/error >/dev/null 2>&1 || true; \
+		curl -s http://localhost:3004/ >/dev/null; \
+		curl -s http://localhost:3004/api/data >/dev/null; \
+		curl -s http://localhost:3004/api/error >/dev/null 2>&1 || true; \
+		curl -s http://localhost:3005/ >/dev/null; \
+		curl -s http://localhost:3005/api/data >/dev/null; \
+		curl -s http://localhost:3005/api/error >/dev/null 2>&1 || true; \
+	done
+	@echo ""
+	@echo "$(GREEN)$(BOLD)Example traffic generated!$(RESET) Explore in Grafana:"
+	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo ""
+
+bootstrap: ## Install all stacks, generate demo data, and open Grafana
+	@$(MAKE) --no-print-directory install
+	@$(MAKE) --no-print-directory demo
+	@$(MAKE) --no-print-directory open

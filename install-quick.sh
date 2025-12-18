@@ -15,7 +15,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Check if Docker Compose is available
-if ! command -v docker compose &> /dev/null; then
+if ! docker compose version >/dev/null 2>&1; then
     echo "❌ Docker Compose is not available. Please install Docker Compose."
     echo "   For Docker Desktop, it's included automatically."
     echo "   For standalone installation, see: https://docs.docker.com/compose/install/"
@@ -37,6 +37,16 @@ if [ ! -f ".env" ]; then
     echo "✅ .env file created"
 fi
 
+# Generate a secure Grafana password if the default placeholder is present
+generated_password=""
+if grep -q "CHANGE_ME_TO_SECURE_PASSWORD" .env 2>/dev/null; then
+    generated_password="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)"
+    tmp_file="$(mktemp)"
+    sed "s/CHANGE_ME_TO_SECURE_PASSWORD/${generated_password}/" .env > "$tmp_file"
+    mv "$tmp_file" .env
+    echo "✅ Generated Grafana admin password and saved it to .env"
+fi
+
 # Check if network exists, if not create it
 echo "🔧 Setting up Docker network..."
 if ! docker network inspect oib-network &> /dev/null; then
@@ -54,10 +64,16 @@ echo ""
 echo "🎉 Installation completed successfully!"
 echo ""
 echo "📊 Your observability stack is now ready:"
-echo "   • Grafana: http://localhost:3000 (admin / admin)"
+echo "   • Grafana: http://localhost:3000 (credentials in .env)"
 echo "   • Logging: http://localhost:12345 (Alloy UI)"
 echo "   • Metrics: http://localhost:9090 (Prometheus)"
 echo "   • Telemetry: http://localhost:12346 (Alloy UI)"
+if [ -n "$generated_password" ]; then
+    echo ""
+    echo "🔑 Grafana login:"
+    echo "   • Username: admin"
+    echo "   • Password: $generated_password"
+fi
 echo ""
 echo "💡 Next steps:"
 echo "   1. Check the integration guide with 'make info'"

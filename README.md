@@ -1,7 +1,8 @@
 # Observability in a Box (OIB)
 
 A plug-and-play observability stack for homelab users. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
-> **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!
+> **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!  
+> **One-command path**: `make bootstrap`
 ## � Prerequisites
 
 Before you begin, ensure you have:
@@ -38,8 +39,10 @@ make health
 
 **Alternative installation methods:**
 ```bash
-# Quick install script (auto-creates .env)
+# Quick install script (auto-creates .env and generates a secure Grafana password)
 ./install-quick.sh
+#
+# The generated password is printed once and stored in .env
 
 # Install individual stacks only
 make install-logging    # Loki + Alloy
@@ -182,6 +185,8 @@ make validate             # Validate configuration files
 # Utilities
 make open                 # Open Grafana in browser
 make demo                 # Generate sample data (logs, metrics, traces)
+make demo-examples        # Run example apps and generate traffic
+make bootstrap            # Install + demo + open Grafana
 make disk-usage           # Show disk space used by OIB
 make version              # Show versions of running components
 
