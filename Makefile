@@ -5,8 +5,8 @@
         uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry \
         status info info-grafana info-logging info-metrics info-telemetry \
         logs logs-grafana logs-logging logs-metrics logs-telemetry \
-        network health doctor check-ports update clean ps validate \
-        open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
+        network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry \
+        clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api
 
 # Colors
@@ -46,7 +46,7 @@ help: ## Show this help message
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
-	@grep -E '^(update|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Cleanup:$(RESET)"
 	@grep -E '^uninstall[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -446,6 +446,34 @@ update: ## Pull latest images and restart all stacks
 	@$(MAKE) --no-print-directory restart
 	@echo ""
 	@echo "$(GREEN)✓ All stacks updated$(RESET)"
+
+update-grafana: ## Pull latest Grafana image and restart
+	@echo "$(CYAN)Pulling latest Grafana image...$(RESET)"
+	@cd grafana && $(DOCKER_COMPOSE) pull
+	@echo "$(CYAN)Restarting Grafana...$(RESET)"
+	@cd grafana && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Grafana updated$(RESET)"
+
+update-logging: ## Pull latest logging images (Loki, Alloy) and restart
+	@echo "$(CYAN)Pulling latest logging images...$(RESET)"
+	@cd logging && $(DOCKER_COMPOSE) pull
+	@echo "$(CYAN)Restarting logging stack...$(RESET)"
+	@cd logging && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Logging stack updated$(RESET)"
+
+update-metrics: ## Pull latest metrics images (Prometheus, exporters) and restart
+	@echo "$(CYAN)Pulling latest metrics images...$(RESET)"
+	@cd metrics && $(DOCKER_COMPOSE) pull
+	@echo "$(CYAN)Restarting metrics stack...$(RESET)"
+	@cd metrics && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Metrics stack updated$(RESET)"
+
+update-telemetry: ## Pull latest telemetry images (Tempo, Alloy) and restart
+	@echo "$(CYAN)Pulling latest telemetry images...$(RESET)"
+	@cd telemetry && $(DOCKER_COMPOSE) pull
+	@echo "$(CYAN)Restarting telemetry stack...$(RESET)"
+	@cd telemetry && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Telemetry stack updated$(RESET)"
 
 clean: ## Remove unused Docker resources (images, networks, volumes)
 	@echo "$(CYAN)Cleaning up unused Docker resources...$(RESET)"
