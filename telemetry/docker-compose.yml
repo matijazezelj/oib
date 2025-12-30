@@ -16,10 +16,11 @@ services:
     networks:
       - oib-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/ready"]
+      test: ["CMD", "/tempo", "--version"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
