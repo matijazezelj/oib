@@ -2,16 +2,21 @@
 
 This directory contains examples showing how to integrate your applications with the OIB observability stack.
 
-## Quick Install (Recommended)
+## Prerequisites
 
-From the repo root, you can use the quick install script to set up the stack, create `.env` if missing, and create the `oib-network` Docker network:
+From the repo root, install the OIB stack:
 
 ```bash
-./install-quick.sh
-```
+# Configure credentials
+cp .env.example .env
+# Edit .env and set GRAFANA_ADMIN_PASSWORD
 
-This script checks Docker/Compose/Make, generates a Grafana password if the default placeholder is present in `.env`, and runs `make install`.
-If any UI ports are already in use, it will prompt you to pick the next available port or enter a custom one and save the choice in `.env`.
+# Install all stacks
+make install
+
+# Verify installation
+make health
+```
 
 ## One-Command Demo
 

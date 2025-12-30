@@ -37,14 +37,8 @@ make install
 make health
 ```
 
-**Alternative installation methods:**
+**Install individual stacks:**
 ```bash
-# Quick install script (auto-creates .env and generates a secure Grafana password)
-./install-quick.sh
-#
-# The generated password is printed once and stored in .env
-
-# Install individual stacks only
 make install-logging    # Loki + Alloy
 make install-metrics    # Prometheus + Node Exporter + cAdvisor
 make install-telemetry  # Tempo + Alloy
