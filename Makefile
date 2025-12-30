@@ -498,10 +498,19 @@ latest: ## Pull and run :latest versions of all images
 	@docker pull grafana/tempo:latest
 	@echo ""
 	@echo "$(CYAN)Recreating containers with :latest images...$(RESET)"
-	@cd logging && LOKI_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d
-	@cd metrics && PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest BLACKBOX_VERSION=latest CADVISOR_VERSION=latest $(DOCKER_COMPOSE) up -d
-	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d
-	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d
+	@echo "$(CYAN)  Logging stack...$(RESET)"
+	@cd logging && LOKI_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@echo "$(CYAN)  Metrics stack...$(RESET)"
+	@cd metrics && PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest BLACKBOX_VERSION=latest CADVISOR_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@echo "$(CYAN)  Telemetry stack...$(RESET)"
+	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@echo "$(CYAN)  Grafana...$(RESET)"
+	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@echo ""
+	@echo "$(CYAN)Waiting for services to be healthy...$(RESET)"
+	@sleep 10
+	@echo ""
+	@$(MAKE) --no-print-directory status
 	@echo ""
 	@echo "$(GREEN)$(BOLD)✓ All stacks running with :latest images$(RESET)"
 	@echo ""
