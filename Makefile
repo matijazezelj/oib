@@ -497,14 +497,11 @@ latest: ## Pull and run :latest versions of all images
 	@echo "$(CYAN)Tempo:$(RESET)"
 	@docker pull grafana/tempo:latest
 	@echo ""
-	@echo "$(CYAN)Stopping current containers...$(RESET)"
-	@$(MAKE) --no-print-directory stop 2>/dev/null || true
-	@echo ""
-	@echo "$(CYAN)Starting with :latest images...$(RESET)"
-	@GRAFANA_VERSION=latest LOKI_VERSION=latest ALLOY_VERSION=latest \
-		PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest \
-		BLACKBOX_VERSION=latest CADVISOR_VERSION=latest TEMPO_VERSION=latest \
-		$(MAKE) --no-print-directory start
+	@echo "$(CYAN)Recreating containers with :latest images...$(RESET)"
+	@cd logging && LOKI_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d
+	@cd metrics && PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest BLACKBOX_VERSION=latest CADVISOR_VERSION=latest $(DOCKER_COMPOSE) up -d
+	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d
+	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d
 	@echo ""
 	@echo "$(GREEN)$(BOLD)✓ All stacks running with :latest images$(RESET)"
 	@echo ""
