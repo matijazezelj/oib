@@ -67,7 +67,36 @@ OIB comes with four ready-to-use Grafana dashboards:
 
 ---
 
-## 📖 The Story Behind OIB
+## � How It Looks
+
+### Dashboard Overview
+All OIB dashboards organized in one folder, with tags for easy filtering.
+
+![OIB Dashboards](assets/images/dashboards.png)
+
+### System Overview
+Real-time CPU, memory, disk gauges plus per-container resource usage.
+
+![System Overview](assets/images/system-overview.png)
+
+### Logs Explorer
+Log volume by container, live log stream, and dedicated errors/warnings panel.
+
+![Logs Explorer](assets/images/logs-explorer.png)
+
+### Traces Explorer
+Full distributed tracing with PostgreSQL, Redis, and HTTP spans visible.
+
+![Traces Explorer](assets/images/traces-explorer.png)
+
+### Request Latency & Probing
+Endpoint health status, probe latency breakdown, and k6 load test metrics.
+
+![Request Latency](assets/images/request-latency.png)
+
+---
+
+## �📖 The Story Behind OIB
 
 I've spent 25 years in infrastructure. Started as a sysadmin, moved through DevOps, now I'm in SecOps. Along the way I've worked on systems handling petabytes of data and hundreds of thousands of requests per second.
 
