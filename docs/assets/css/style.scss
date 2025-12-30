@@ -1,0 +1,55 @@
+---
+---
+
+@import "jekyll-theme-cayman";
+
+/* Custom styles for OIB GitHub Pages */
+
+/* Fix header button visibility - use dark text on light buttons */
+.main-content .btn {
+  color: #155799;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(21, 87, 153, 0.3);
+  transition: all 0.2s ease;
+}
+
+.main-content .btn:hover {
+  color: #fff;
+  background-color: #155799;
+  border-color: #155799;
+}
+
+/* Make code blocks stand out more */
+.main-content code {
+  background-color: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Better table styling */
+.main-content table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.main-content table th,
+.main-content table td {
+  padding: 10px 12px;
+  border: 1px solid #e1e4e8;
+}
+
+.main-content table th {
+  background-color: #f6f8fa;
+  font-weight: 600;
+}
+
+.main-content table tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+/* Screenshot images - add subtle shadow and rounded corners */
+.main-content img {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin: 16px 0;
+}
