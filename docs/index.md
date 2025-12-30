@@ -38,7 +38,8 @@ That's it. Open [http://localhost:3000](http://localhost:3000) and start explori
 | **Logging** | Loki + Alloy | Centralized log aggregation with automatic Docker log collection |
 | **Metrics** | Prometheus + Exporters | Host metrics, container metrics, endpoint probing |
 | **Tracing** | Tempo + Alloy | Distributed tracing with OpenTelemetry support |
-| **Visualization** | Grafana | Pre-built dashboards for all three pillars |
+| **Profiling** | Pyroscope | Continuous profiling (optional: `make install-profiling`) |
+| **Visualization** | Grafana | Pre-built dashboards for all four pillars |
 | **Testing** | k6 | Load testing with metrics streaming to Prometheus |
 
 ---
@@ -52,6 +53,7 @@ Once installed, your applications can send data to:
 | **Traces** | `localhost:4317` | OTLP gRPC |
 | **Traces** | `http://localhost:4318` | OTLP HTTP |
 | **Metrics** | `http://localhost:9091` | Prometheus Pushgateway |
+| **Profiles** | `http://localhost:4040` | Pyroscope SDK (optional) |
 | **Logs** | Automatic | Docker containers are auto-collected |
 
 ---

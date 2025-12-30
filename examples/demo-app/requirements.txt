@@ -9,3 +9,4 @@ opentelemetry-instrumentation-psycopg2>=0.42b0
 redis>=5.0.0
 psycopg2-binary>=2.9.9
 structlog>=23.2.0
+pyroscope-io>=0.8.7

@@ -49,3 +49,21 @@ datasources:
             value: service_name
       tracesToMetrics:
         datasourceUid: prometheus
+      tracesToProfiles:
+        datasourceUid: pyroscope
+        tags:
+          - key: service.name
+            value: service_name
+        profileTypeId: process_cpu:cpu:nanoseconds:cpu:nanoseconds
+        customQuery: true
+
+  # Pyroscope - Continuous Profiling (optional - install with: make install-profiling)
+  - name: Pyroscope
+    uid: pyroscope
+    type: grafana-pyroscope-datasource
+    access: proxy
+    url: http://oib-pyroscope:4040
+    isDefault: false
+    editable: false
+    jsonData:
+      backendType: pyroscope

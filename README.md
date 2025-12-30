@@ -86,6 +86,7 @@ This creates sample data across all three pillars so you can immediately explore
 | **Logging** | Loki, Alloy | Centralized log aggregation |
 | **Metrics** | Prometheus, Pushgateway, Node Exporter, cAdvisor, Blackbox Exporter | Metrics collection (host, containers & endpoint probing) |
 | **Telemetry** | Tempo, Alloy | Distributed tracing |
+| **Profiling** | Pyroscope | Continuous profiling (optional) |
 | **Testing** | k6 | Load testing with Prometheus metrics output |
 | **Grafana** | Grafana (unified) | Visualization for all stacks |
 
@@ -114,6 +115,12 @@ After installation, each stack will display integration endpoints:
 - **Tempo API**: `http://localhost:3200` (localhost only)
 
 > **From Docker containers**: Use `oib-alloy-telemetry:4317` on `oib-network`
+
+### Profiling Stack (Optional)
+- **Pyroscope**: `http://localhost:4040` (localhost only)
+- **Install**: `make install-profiling`
+
+> **From Docker containers**: Use `oib-pyroscope:4040` on `oib-network`
 
 ### Grafana
 - **Grafana UI**: `http://<host>:3000` ✅ Public

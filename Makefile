@@ -1,11 +1,11 @@
-.PHONY: help install install-grafana install-logging install-metrics install-telemetry \
-        start start-grafana start-logging start-metrics start-telemetry \
-        stop stop-grafana stop-logging stop-metrics stop-telemetry \
-        restart restart-grafana restart-logging restart-metrics restart-telemetry \
-        uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry \
-        status info info-grafana info-logging info-metrics info-telemetry \
-        logs logs-grafana logs-logging logs-metrics logs-telemetry \
-        network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry \
+.PHONY: help install install-grafana install-logging install-metrics install-telemetry install-profiling \
+        start start-grafana start-logging start-metrics start-telemetry start-profiling \
+        stop stop-grafana stop-logging stop-metrics stop-telemetry stop-profiling \
+        restart restart-grafana restart-logging restart-metrics restart-telemetry restart-profiling \
+        uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling \
+        status info info-grafana info-logging info-metrics info-telemetry info-profiling \
+        logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling \
+        network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api
 
@@ -31,7 +31,7 @@ help: ## Show this help message
 	@echo "  make $(GREEN)<target>$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Installation:$(RESET)"
-	@grep -E '^(install|install-grafana|install-logging|install-metrics|install-telemetry):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(install|install-grafana|install-logging|install-metrics|install-telemetry|install-profiling):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Management:$(RESET)"
 	@grep -E '^(start|stop|restart|status|info|logs)[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -46,13 +46,13 @@ help: ## Show this help message
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
-	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Cleanup:$(RESET)"
 	@grep -E '^uninstall[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Stack-specific commands:$(RESET)"
-	@echo "  Append $(YELLOW)-grafana$(RESET), $(YELLOW)-logging$(RESET), $(YELLOW)-metrics$(RESET), or $(YELLOW)-telemetry$(RESET) to commands"
+	@echo "  Append $(YELLOW)-grafana$(RESET), $(YELLOW)-logging$(RESET), $(YELLOW)-metrics$(RESET), $(YELLOW)-telemetry$(RESET), or $(YELLOW)-profiling$(RESET) to commands"
 	@echo "  Example: make install-logging, make stop-metrics, make logs-telemetry"
 	@echo ""
 
@@ -117,6 +117,13 @@ install-telemetry: network ## Install telemetry stack (Tempo + Alloy)
 	@cd telemetry && $(DOCKER_COMPOSE) up -d
 	@echo "$(GREEN)✓ Telemetry stack installed$(RESET)"
 
+install-profiling: network ## Install profiling stack (Pyroscope) - optional
+	@echo "$(CYAN)🔥 Installing Profiling Stack...$(RESET)"
+	@cd profiling && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Profiling stack installed$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Note: Restart Grafana to enable Pyroscope datasource: make restart-grafana$(RESET)"
+
 # ==================== Start ====================
 
 start: start-logging start-metrics start-telemetry start-grafana ## Start all stacks
@@ -133,6 +140,9 @@ start-metrics: ## Start metrics stack
 
 start-telemetry: ## Start telemetry stack
 	@cd telemetry && $(DOCKER_COMPOSE) start
+
+start-profiling: ## Start profiling stack
+	@cd profiling && $(DOCKER_COMPOSE) start
 
 # ==================== Stop ====================
 
@@ -151,6 +161,9 @@ stop-metrics: ## Stop metrics stack
 stop-telemetry: ## Stop telemetry stack
 	@cd telemetry && $(DOCKER_COMPOSE) stop
 
+stop-profiling: ## Stop profiling stack
+	@cd profiling && $(DOCKER_COMPOSE) stop
+
 # ==================== Restart ====================
 
 restart: restart-logging restart-metrics restart-telemetry restart-grafana ## Restart all stacks
@@ -167,6 +180,9 @@ restart-metrics: ## Restart metrics stack
 
 restart-telemetry: ## Restart telemetry stack
 	@cd telemetry && $(DOCKER_COMPOSE) restart
+
+restart-profiling: ## Restart profiling stack
+	@cd profiling && $(DOCKER_COMPOSE) restart
 
 # ==================== Uninstall ====================
 
@@ -200,6 +216,11 @@ uninstall-telemetry: ## Remove telemetry stack and volumes
 	@echo "$(YELLOW)Removing telemetry stack...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) down -v
 	@echo "$(GREEN)✓ Telemetry stack removed$(RESET)"
+
+uninstall-profiling: ## Remove profiling stack and volumes
+	@echo "$(YELLOW)Removing profiling stack...$(RESET)"
+	@cd profiling && $(DOCKER_COMPOSE) down -v
+	@echo "$(GREEN)✓ Profiling stack removed$(RESET)"
 
 # ==================== Status ====================
 
@@ -259,6 +280,12 @@ status: ## Show status of all stacks with health indicators
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (telemetry)" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (telemetry)" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-pyroscope; then \
+		health=$$(curl -sf http://localhost:4040/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Pyroscope" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Pyroscope" "stopped"; \
 	fi
 	@echo ""
 
@@ -339,6 +366,24 @@ info-telemetry: ## Show telemetry integration info
 	@echo "  $(CYAN)OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318$(RESET)"
 	@echo ""
 
+info-profiling: ## Show profiling integration info
+	@echo ""
+	@echo "$(BOLD)$(CYAN)🔥 PROFILING (Pyroscope)$(RESET)"
+	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Pyroscope UI:$(RESET)"
+	@echo "  URL:      $(YELLOW)http://localhost:4040$(RESET)"
+	@echo ""
+	@echo "$(GREEN)SDK Integration:$(RESET)"
+	@echo "  Server:   $(YELLOW)http://<oib-host>:4040$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Configure your app:$(RESET)"
+	@echo "  $(CYAN)PYROSCOPE_SERVER_ADDRESS=http://<oib-host>:4040$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Supported Languages:$(RESET)"
+	@echo "  • Go, Python, Java, .NET, Ruby, Node.js, Rust"
+	@echo ""
+
 # ==================== Logs ====================
 
 logs: ## Tail logs from all stacks
@@ -356,6 +401,9 @@ logs-metrics: ## Tail metrics stack logs
 
 logs-telemetry: ## Tail telemetry stack logs
 	@cd telemetry && $(DOCKER_COMPOSE) logs -f
+
+logs-profiling: ## Tail profiling stack logs
+	@cd profiling && $(DOCKER_COMPOSE) logs -f
 
 # ==================== Health & Diagnostics ====================
 
@@ -377,6 +425,9 @@ health: ## Quick health check of all services
 	@echo "$(CYAN)Telemetry:$(RESET)"
 	@curl -sf http://localhost:3200/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Tempo is healthy" || echo "  $(RED)✗$(RESET) Tempo is not responding"
 	@curl -sf http://localhost:12346/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (telemetry) is healthy" || echo "  $(RED)✗$(RESET) Alloy (telemetry) is not responding"
+	@echo ""
+	@echo "$(CYAN)Profiling:$(RESET)"
+	@curl -sf http://localhost:4040/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Pyroscope is healthy" || echo "  $(RED)✗$(RESET) Pyroscope is not responding (run 'make install-profiling' to enable)"
 	@echo ""
 
 doctor: ## Diagnose common issues (Docker, ports, config)
@@ -475,6 +526,13 @@ update-telemetry: ## Pull latest telemetry images (Tempo, Alloy) and restart
 	@cd telemetry && $(DOCKER_COMPOSE) up -d
 	@echo "$(GREEN)✓ Telemetry stack updated$(RESET)"
 
+update-profiling: ## Pull latest profiling images (Pyroscope) and restart
+	@echo "$(CYAN)Pulling latest profiling images...$(RESET)"
+	@cd profiling && $(DOCKER_COMPOSE) pull
+	@echo "$(CYAN)Restarting profiling stack...$(RESET)"
+	@cd profiling && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Profiling stack updated$(RESET)"
+
 latest: ## Pull and run :latest versions of all images
 	@echo "$(BOLD)🔄 Pulling :latest images...$(RESET)"
 	@echo ""
@@ -496,6 +554,8 @@ latest: ## Pull and run :latest versions of all images
 	@docker pull gcr.io/cadvisor/cadvisor:latest
 	@echo "$(CYAN)Tempo:$(RESET)"
 	@docker pull grafana/tempo:latest
+	@echo "$(CYAN)Pyroscope:$(RESET)"
+	@docker pull grafana/pyroscope:latest
 	@echo ""
 	@echo "$(CYAN)Recreating containers with :latest images...$(RESET)"
 	@echo "$(CYAN)  Logging stack...$(RESET)"
@@ -504,6 +564,8 @@ latest: ## Pull and run :latest versions of all images
 	@cd metrics && PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest BLACKBOX_VERSION=latest CADVISOR_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Telemetry stack...$(RESET)"
 	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@echo "$(CYAN)  Profiling stack...$(RESET)"
+	@cd profiling && PYROSCOPE_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Grafana...$(RESET)"
 	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo ""

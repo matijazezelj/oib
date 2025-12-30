@@ -9,6 +9,8 @@ services:
     environment:
       - OTEL_SERVICE_NAME=oib-demo-app
       - OTEL_EXPORTER_OTLP_ENDPOINT=oib-alloy-telemetry:4317
+      - PYROSCOPE_SERVER_ADDRESS=http://oib-pyroscope:4040
+      - PYROSCOPE_ENABLED=${PYROSCOPE_ENABLED:-true}
       - POSTGRES_HOST=oib-postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-oib}

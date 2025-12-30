@@ -1,0 +1,93 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "content": "# 🔥 Continuous Profiling with Pyroscope\n\nPyroscope collects CPU and memory profiles from your applications, helping you identify performance bottlenecks.\n\n## 👉 [Click here to explore profiles](/explore?schemaVersion=1&panes=%7B%22v1b%22%3A%7B%22datasource%22%3A%22pyroscope%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22grafana-pyroscope-datasource%22%2C%22uid%22%3A%22pyroscope%22%7D%2C%22profileTypeId%22%3A%22process_cpu%3Acpu%3Ananoseconds%3Acpu%3Ananoseconds%22%2C%22labelSelector%22%3A%22%7B%7D%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D&orgId=1)\n\nThe **Explore** view provides flame graphs, top functions, and time-series of resource usage.",
+        "mode": "markdown"
+      },
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 6},
+      "id": 2,
+      "options": {
+        "content": "## 📡 Integration Endpoint\n\nSend profiles to:\n\n| Setting | Value |\n|---------|-------|\n| **Server** | `http://<oib-host>:4040` |\n\nFor Docker containers on oib-network:\n```\nhttp://oib-pyroscope:4040\n```\n\n## 🎯 Profile Types\n\n| Type | Description |\n|------|-------------|\n| **CPU** | Where time is spent executing code |\n| **Memory** | Heap allocations and memory usage |\n| **Goroutines** | Active goroutines (Go only) |\n| **Mutex** | Lock contention (Go only) |\n| **Block** | Blocking operations (Go only) |",
+        "mode": "markdown"
+      },
+      "title": "Integration",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 6},
+      "id": 3,
+      "options": {
+        "content": "## 🐍 Python Integration\n\n```python\nimport pyroscope\n\npyroscope.configure(\n    application_name=\"my-app\",\n    server_address=\"http://<oib-host>:4040\",\n    tags={\n        \"env\": \"production\",\n        \"version\": \"1.0.0\"\n    }\n)\n```\n\n**Install:** `pip install pyroscope-io`\n\n## 🔧 Environment Variables\n\n```bash\nexport PYROSCOPE_SERVER_ADDRESS=http://<oib-host>:4040\nexport PYROSCOPE_APPLICATION_NAME=my-app\n```",
+        "mode": "markdown"
+      },
+      "title": "Python Setup",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 12, "w": 8, "x": 0, "y": 16},
+      "id": 4,
+      "options": {
+        "content": "## 🟢 Node.js Integration\n\n```javascript\nconst Pyroscope = require('@pyroscope/nodejs');\n\nPyroscope.init({\n  serverAddress: 'http://<oib-host>:4040',\n  appName: 'my-node-app',\n  tags: {\n    env: 'production'\n  }\n});\n\nPyroscope.start();\n```\n\n**Install:** `npm install @pyroscope/nodejs`",
+        "mode": "markdown"
+      },
+      "title": "Node.js Setup",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 12, "w": 8, "x": 8, "y": 16},
+      "id": 5,
+      "options": {
+        "content": "## 🔵 Go Integration\n\n```go\nimport \"github.com/grafana/pyroscope-go\"\n\nfunc main() {\n    pyroscope.Start(pyroscope.Config{\n        ApplicationName: \"my-go-app\",\n        ServerAddress:   \"http://<oib-host>:4040\",\n        ProfileTypes: []pyroscope.ProfileType{\n            pyroscope.ProfileCPU,\n            pyroscope.ProfileAllocObjects,\n            pyroscope.ProfileAllocSpace,\n            pyroscope.ProfileInuseObjects,\n            pyroscope.ProfileInuseSpace,\n        },\n    })\n    // ... your code\n}\n```",
+        "mode": "markdown"
+      },
+      "title": "Go Setup",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 12, "w": 8, "x": 16, "y": 16},
+      "id": 6,
+      "options": {
+        "content": "## ☕ Java Integration\n\n```java\nimport io.pyroscope.javaagent.PyroscopeAgent;\nimport io.pyroscope.javaagent.config.Config;\n\nPyroscopeAgent.start(\n    new Config.Builder()\n        .setApplicationName(\"my-java-app\")\n        .setServerAddress(\"http://<oib-host>:4040\")\n        .build()\n);\n```\n\nOr use the **Java agent**:\n```bash\njava -javaagent:pyroscope.jar \\\n  -Dpyroscope.application.name=my-app \\\n  -Dpyroscope.server.address=http://<oib-host>:4040 \\\n  -jar myapp.jar\n```",
+        "mode": "markdown"
+      },
+      "title": "Java Setup",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+      "id": 7,
+      "options": {
+        "content": "## 📊 Understanding Flame Graphs\n\n| Element | Meaning |\n|---------|----------|\n| **Width** | Time spent in that function (wider = more time) |\n| **Height** | Call stack depth (top = entry point, bottom = leaf functions) |\n| **Color** | Different code paths or packages |\n| **Self Time** | Time in the function itself (excluding calls to other functions) |\n| **Total Time** | Time including all child function calls |\n\n### 🔍 Tips\n- **Click** on a block to zoom into that subtree\n- **Search** to highlight specific functions\n- Look for **wide blocks** at the bottom - these are your hotspots\n- Compare profiles over time to spot regressions",
+        "mode": "markdown"
+      },
+      "title": "Reading Flame Graphs",
+      "type": "text"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": ["oib", "profiling", "pyroscope"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Profiles Explorer",
+  "uid": "oib-profiles-explorer",
+  "version": 1,
+  "weekStart": ""
+}

@@ -1,0 +1,40 @@
+name: oib-profiling
+
+services:
+  pyroscope:
+    image: grafana/pyroscope:${PYROSCOPE_VERSION:-1.7.1}
+    container_name: oib-pyroscope
+    env_file:
+      - ../.env
+    ports:
+      - "127.0.0.1:${PYROSCOPE_PORT:-4040}:4040"
+    volumes:
+      - oib-pyroscope-data:/data
+    command:
+      - "server"
+    networks:
+      - oib-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4040/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          memory: 256M
+
+volumes:
+  oib-pyroscope-data:
+    name: oib-pyroscope-data
+
+networks:
+  oib-network:
+    external: true

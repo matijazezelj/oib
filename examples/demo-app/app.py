@@ -28,6 +28,9 @@ from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
 # Prometheus metrics
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
+# Pyroscope continuous profiling
+import pyroscope
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -35,6 +38,10 @@ logger = logging.getLogger(__name__)
 # Environment configuration
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "oib-demo-app")
 OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "oib-alloy-telemetry:4317")
+
+# Pyroscope configuration
+PYROSCOPE_SERVER = os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://oib-pyroscope:4040")
+PYROSCOPE_ENABLED = os.getenv("PYROSCOPE_ENABLED", "true").lower() == "true"
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "oib-postgres")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
@@ -44,6 +51,21 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "oib_demo")
 
 REDIS_HOST = os.getenv("REDIS_HOST", "oib-redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+
+# Initialize Pyroscope profiling
+if PYROSCOPE_ENABLED:
+    try:
+        pyroscope.configure(
+            application_name=SERVICE_NAME,
+            server_address=PYROSCOPE_SERVER,
+            tags={
+                "service": SERVICE_NAME,
+                "version": "1.0.0",
+            }
+        )
+        logger.info(f"Pyroscope profiling enabled, sending to {PYROSCOPE_SERVER}")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Pyroscope: {e}")
 
 # Setup OpenTelemetry tracing
 resource = Resource.create({"service.name": SERVICE_NAME, "service.version": "1.0.0"})
