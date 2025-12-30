@@ -514,7 +514,7 @@ latest: ## Pull and run :latest versions of all images
 	@echo ""
 	@echo "$(GREEN)$(BOLD)✓ All stacks running with :latest images$(RESET)"
 	@echo ""
-	@echo "$(YELLOW)Note: To revert to pinned versions, run: make restart$(RESET)"
+	@echo "$(YELLOW)Note: To revert to pinned versions, run: make install$(RESET)"
 
 clean: ## Remove unused Docker resources (images, networks, volumes)
 	@echo "$(CYAN)Cleaning up unused Docker resources...$(RESET)"
