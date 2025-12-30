@@ -161,6 +161,34 @@ cp .env.example .env
 
 > **Note**: Loki and Tempo retention are configured in their respective config files, not via environment variables.
 
+### Image Version Overrides
+
+By default, OIB uses pinned (stable) versions for all images. You can override these in your `.env` file:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRAFANA_VERSION` | `11.3.1` | Grafana image tag |
+| `LOKI_VERSION` | `3.3.2` | Loki image tag |
+| `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
+| `PROMETHEUS_VERSION` | `v2.48.1` | Prometheus image tag |
+| `PUSHGATEWAY_VERSION` | `v1.6.2` | Pushgateway image tag |
+| `NODE_EXPORTER_VERSION` | `v1.7.0` | Node Exporter image tag |
+| `CADVISOR_VERSION` | `v0.47.2` | cAdvisor image tag |
+| `BLACKBOX_VERSION` | `v0.25.0` | Blackbox Exporter image tag |
+| `TEMPO_VERSION` | `2.6.1` | Tempo image tag |
+
+**Quick commands:**
+```bash
+# Run all services with :latest images
+make latest
+
+# Revert to pinned (stable) versions
+make install
+
+# Override a single service version
+GRAFANA_VERSION=12.0.0 make update-grafana
+```
+
 ## 🛠️ Commands
 
 ```bash
@@ -200,7 +228,12 @@ make restart              # Restart all stacks
 make info                 # Show integration endpoints
 
 # Maintenance
-make update               # Pull latest images and restart
+make update               # Pull pinned version images and restart
+make update-grafana       # Update Grafana only
+make update-logging       # Update Loki + Alloy
+make update-metrics       # Update Prometheus + exporters
+make update-telemetry     # Update Tempo + Alloy
+make latest               # Pull and run :latest versions of all images
 make clean                # Remove unused Docker resources
 make logs                 # Tail logs from all stacks
 
@@ -214,21 +247,28 @@ make uninstall            # Remove all stacks and volumes (with confirmation)
 oib/
 ├── Makefile                    # Main entry point
 ├── README.md
+├── .env.example                # Environment variables template
 ├── logging/
+│   ├── README.md               # Logging stack documentation
 │   ├── docker-compose.yml
 │   └── config/
 │       ├── loki-config.yml
 │       └── alloy-config.alloy
 ├── metrics/
+│   ├── README.md               # Metrics stack documentation
 │   ├── docker-compose.yml
 │   └── config/
 │       ├── prometheus.yml
-│       └── blackbox.yml        # Blackbox exporter probe modules
+│       ├── blackbox.yml        # Blackbox exporter probe modules
+│       └── rules/              # Alerting rules (future)
 ├── telemetry/
+│   ├── README.md               # Telemetry stack documentation
 │   ├── docker-compose.yml
 │   └── config/
+│       ├── tempo.yaml
 │       └── alloy-config.alloy
 ├── grafana/
+│   ├── README.md               # Grafana documentation
 │   ├── docker-compose.yml
 │   └── provisioning/
 │       ├── datasources/
@@ -240,8 +280,8 @@ oib/
 │               ├── traces-explorer.json
 │               └── request-latency.json
 ├── testing/
+│   ├── README.md               # Load testing documentation
 │   ├── docker-compose.yml      # k6 load testing
-│   ├── README.md
 │   └── scripts/
 │       ├── basic-load.js
 │       ├── stress-test.js
