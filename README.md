@@ -90,8 +90,9 @@ This creates sample data across all three pillars so you can immediately explore
 | Stack | Components | Purpose |
 |-------|------------|--------|
 | **Logging** | Loki, Alloy | Centralized log aggregation |
-| **Metrics** | Prometheus, Pushgateway, Node Exporter, cAdvisor | Metrics collection (host & containers) |
+| **Metrics** | Prometheus, Pushgateway, Node Exporter, cAdvisor, Blackbox Exporter | Metrics collection (host, containers & endpoint probing) |
 | **Telemetry** | Tempo, Alloy | Distributed tracing |
+| **Testing** | k6 | Load testing with Prometheus metrics output |
 | **Grafana** | Grafana (unified) | Visualization for all stacks |
 
 ## 🔌 Integration Endpoints
@@ -126,13 +127,14 @@ After installation, each stack will display integration endpoints:
 
 ### 📊 Pre-built Dashboards
 
-OIB comes with three ready-to-use dashboards:
+OIB comes with four ready-to-use dashboards:
 
 | Dashboard | Description |
 |-----------|-------------|
 | **System Overview** | Host metrics, container CPU/memory, disk usage |
 | **Logs Explorer** | Log volume, live logs, errors/warnings panel |
 | **Traces Explorer** | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
+| **Request Latency** | Endpoint probing (Blackbox), k6 load test metrics, latency percentiles |
 
 ## ⚙️ Configuration
 
@@ -155,6 +157,7 @@ cp .env.example .env
 | `PUSHGATEWAY_PORT` | `9091` | Pushgateway port (localhost only) |
 | `NODE_EXPORTER_PORT` | `9100` | Node Exporter port (localhost only) |
 | `CADVISOR_PORT` | `8080` | cAdvisor port (localhost only) |
+| `BLACKBOX_PORT` | `9115` | Blackbox Exporter port (localhost only) |
 | `TEMPO_HTTP_PORT` | `3200` | Tempo HTTP API port (localhost only) |
 | `TEMPO_GRPC_PORT` | `9095` | Tempo gRPC port (localhost only) |
 | `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver (public) |
@@ -181,6 +184,12 @@ make status               # Show all services with health indicators
 make check-ports          # Check if required ports are available
 make ps                   # Show running OIB containers
 make validate             # Validate configuration files
+
+# Load Testing
+make test-load            # Run k6 basic load test
+make test-stress          # Run stress test (find breaking point)
+make test-spike           # Run spike test (sudden traffic)
+make test-api             # Run API endpoint load test
 
 # Utilities
 make open                 # Open Grafana in browser
@@ -219,7 +228,8 @@ oib/
 ├── metrics/
 │   ├── docker-compose.yml
 │   └── config/
-│       └── prometheus.yml
+│       ├── prometheus.yml
+│       └── blackbox.yml        # Blackbox exporter probe modules
 ├── telemetry/
 │   ├── docker-compose.yml
 │   └── config/
@@ -233,7 +243,16 @@ oib/
 │           └── json/
 │               ├── system-overview.json
 │               ├── logs-explorer.json
-│               └── traces-explorer.json
+│               ├── traces-explorer.json
+│               └── request-latency.json
+├── testing/
+│   ├── docker-compose.yml      # k6 load testing
+│   ├── README.md
+│   └── scripts/
+│       ├── basic-load.js
+│       ├── stress-test.js
+│       ├── spike-test.js
+│       └── api-load.js
 └── examples/
     ├── README.md               # Example integration guide
     ├── python-flask/           # Python Flask example app
@@ -305,6 +324,54 @@ const exporter = new OTLPTraceExporter({
 ```
 
 > 💡 See `examples/` for complete working Python Flask, Node.js Express, Ruby on Rails, and PHP apps with full observability.
+
+## 🔍 Endpoint Probing (Blackbox Exporter)
+
+Blackbox Exporter performs synthetic monitoring by probing your endpoints from the outside.
+
+### Features
+
+- HTTP/HTTPS endpoint health checks
+- TCP port connectivity tests  
+- ICMP ping, DNS resolution, gRPC health checks
+- SSL certificate validation
+
+### Default Monitored Endpoints
+
+OIB monitors its own services by default:
+- Grafana, Prometheus, Loki, Tempo
+
+### Add Your Own Endpoints
+
+Edit `metrics/config/prometheus.yml`:
+
+```yaml
+- job_name: 'blackbox-http'
+  static_configs:
+    - targets:
+      - http://your-app:8080/health
+      - https://api.example.com/status
+```
+
+View results in Grafana → **OIB - Request Latency** dashboard.
+
+## 🔥 Load Testing (k6)
+
+Run load tests with metrics streaming to Prometheus:
+
+```bash
+make test-load    # Basic load test
+make test-stress  # Find breaking point
+make test-spike   # Sudden traffic spikes
+
+# Test custom target
+cd testing
+docker compose --profile test run --rm \
+  -e TARGET_URL=http://your-app:8080 \
+  k6 run /scripts/basic-load.js
+```
+
+See [testing/README.md](testing/README.md) for custom test scripts.
 
 ## 🌐 Network
 

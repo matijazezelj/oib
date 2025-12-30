@@ -59,6 +59,71 @@ scrape_configs:
   #       - 'host.docker.internal:8082'
   #       - 'host.docker.internal:8083'
 
+  # ============================================
+  # BLACKBOX EXPORTER - Endpoint Probing
+  # ============================================
+  
+  # Blackbox exporter self-monitoring
+  - job_name: 'blackbox-exporter'
+    static_configs:
+      - targets: ['blackbox-exporter:9115']
+
+  # HTTP endpoint probing
+  # Add your endpoints to probe in the targets list
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        # Add URLs to probe here:
+        - http://oib-grafana:3000/api/health
+        - http://oib-prometheus:9090/-/healthy
+        - http://oib-loki:3100/ready
+        - http://oib-tempo:3200/ready
+        # - https://your-external-service.com/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # TCP port probing
+  # - job_name: 'blackbox-tcp'
+  #   metrics_path: /probe
+  #   params:
+  #     module: [tcp_connect]
+  #   static_configs:
+  #     - targets:
+  #       - 'host.docker.internal:5432'  # PostgreSQL
+  #       - 'host.docker.internal:6379'  # Redis
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: blackbox-exporter:9115
+
+  # ICMP ping probing (requires NET_RAW capability)
+  # - job_name: 'blackbox-icmp'
+  #   metrics_path: /probe
+  #   params:
+  #     module: [icmp]
+  #   static_configs:
+  #     - targets:
+  #       - 8.8.8.8
+  #       - 1.1.1.1
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: blackbox-exporter:9115
+
   # Example: Docker service discovery (for Docker Swarm)
   # - job_name: 'docker-swarm'
   #   dockerswarm_sd_configs:

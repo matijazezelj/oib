@@ -1,0 +1,375 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "content": "# ⏱️ Request Latency & Probing Dashboard\n\nEndpoint health via **Blackbox Exporter** and load test metrics from **k6**. Synthetic monitoring for your services.",
+        "mode": "markdown"
+      },
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 3},
+      "id": 50,
+      "title": "🎯 Endpoint Status",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"0": {"color": "red", "text": "DOWN"}}, "type": "value"},
+            {"options": {"1": {"color": "green", "text": "UP"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 4},
+      "id": 2,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_success{instance=~\".*grafana.*\"}", "legendFormat": "Grafana", "refId": "A"}],
+      "title": "Grafana",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"0": {"color": "red", "text": "DOWN"}}, "type": "value"},
+            {"options": {"1": {"color": "green", "text": "UP"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 4},
+      "id": 3,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_success{instance=~\".*prometheus.*\"}", "legendFormat": "Prometheus", "refId": "A"}],
+      "title": "Prometheus",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"0": {"color": "red", "text": "DOWN"}}, "type": "value"},
+            {"options": {"1": {"color": "green", "text": "UP"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 4},
+      "id": 4,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_success{instance=~\".*loki.*\"}", "legendFormat": "Loki", "refId": "A"}],
+      "title": "Loki",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"0": {"color": "red", "text": "DOWN"}}, "type": "value"},
+            {"options": {"1": {"color": "green", "text": "UP"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 4},
+      "id": 5,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_success{instance=~\".*tempo.*\"}", "legendFormat": "Tempo", "refId": "A"}],
+      "title": "Tempo",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.99}, {"color": "red", "value": 0.95}]},
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 4},
+      "id": 6,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["mean"]}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "avg(avg_over_time(probe_success[24h]))", "legendFormat": "Availability", "refId": "A"}],
+      "title": "24h Average Availability",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 8},
+      "id": 51,
+      "title": "📊 Probe Latency (Blackbox Exporter)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+      "id": 10,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_http_duration_seconds{phase=\"resolve\"}", "legendFormat": "{{instance}} - DNS", "refId": "A"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_http_duration_seconds{phase=\"connect\"}", "legendFormat": "{{instance}} - Connect", "refId": "B"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_http_duration_seconds{phase=\"tls\"}", "legendFormat": "{{instance}} - TLS", "refId": "C"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_http_duration_seconds{phase=\"processing\"}", "legendFormat": "{{instance}} - Processing", "refId": "D"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_http_duration_seconds{phase=\"transfer\"}", "legendFormat": "{{instance}} - Transfer", "refId": "E"}],
+      "title": "HTTP Request Phases",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+      "id": 11,
+      "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_duration_seconds", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Total Probe Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.2}, {"color": "red", "value": 0.5}]},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 17},
+      "id": 12,
+      "options": {
+        "displayMode": "lcd",
+        "maxVizHeight": 300,
+        "minVizHeight": 10,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["last"], "fields": "", "values": false},
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_duration_seconds", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Endpoint Response Times (Current)",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 52,
+      "title": "🔥 k6 Load Test Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 24},
+      "id": 20,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_vus", "legendFormat": "Virtual Users", "refId": "A"}],
+      "title": "Virtual Users (VUs)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 24},
+      "id": 21,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "rate(k6_http_reqs_total[1m])", "legendFormat": "Requests/sec", "refId": "A"}],
+      "title": "Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 24},
+      "id": 22,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "rate(k6_http_req_failed_total[1m]) / rate(k6_http_reqs_total[1m])", "legendFormat": "Error Rate", "refId": "A"}],
+      "title": "Error Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 20, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "red", "value": 1000}]},
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 31},
+      "id": 23,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p50", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.90, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p90", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p95", "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p99", "refId": "D"}
+      ],
+      "title": "HTTP Request Duration Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 31},
+      "id": 24,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_blocked_seconds_bucket[1m])) * 1000", "legendFormat": "Blocked", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_connecting_seconds_bucket[1m])) * 1000", "legendFormat": "Connecting", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_tls_handshaking_seconds_bucket[1m])) * 1000", "legendFormat": "TLS Handshake", "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_sending_seconds_bucket[1m])) * 1000", "legendFormat": "Sending", "refId": "D"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_waiting_seconds_bucket[1m])) * 1000", "legendFormat": "Waiting (TTFB)", "refId": "E"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_receiving_seconds_bucket[1m])) * 1000", "legendFormat": "Receiving", "refId": "F"}
+      ],
+      "title": "HTTP Request Timing Breakdown (p95)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 39},
+      "id": 53,
+      "title": "📈 Probe History",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {"fillOpacity": 70, "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "insertNulls": false, "lineWidth": 0, "spanNulls": false},
+          "mappings": [
+            {"options": {"0": {"color": "red", "text": "FAIL"}}, "type": "value"},
+            {"options": {"1": {"color": "green", "text": "OK"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 40},
+      "id": 30,
+      "options": {"alignValue": "center", "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "mergeValues": true, "rowHeight": 0.9, "showValue": "never", "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_success", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Probe Status History (State Timeline)",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisLabel": "", "drawStyle": "line", "fillOpacity": 5, "lineInterpolation": "smooth", "lineWidth": 1, "showPoints": "never", "stacking": {"mode": "none"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 46},
+      "id": 31,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "right", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "probe_duration_seconds", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Probe Duration History",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 54},
+      "id": 54,
+      "title": "ℹ️ Configuration",
+      "type": "row"
+    },
+    {
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 55},
+      "id": 40,
+      "options": {
+        "content": "## 🔍 Blackbox Exporter\n\nMonitors endpoints via HTTP, TCP, ICMP probes.\n\n### Configure Targets\n\nEdit `metrics/config/prometheus.yml`:\n\n```yaml\n- job_name: 'blackbox-http'\n  metrics_path: /probe\n  params:\n    module: [http_2xx]\n  static_configs:\n    - targets:\n      - http://your-app:8080/health\n      - https://example.com\n  relabel_configs:\n    - source_labels: [__address__]\n      target_label: __param_target\n    - source_labels: [__param_target]\n      target_label: instance\n    - target_label: __address__\n      replacement: oib-blackbox-exporter:9115\n```\n\n### Available Modules\n\n| Module | Description |\n|--------|-------------|\n| `http_2xx` | HTTP GET, expect 2xx |\n| `http_post_2xx` | HTTP POST, expect 2xx |\n| `https_2xx` | HTTPS with TLS |\n| `tcp_connect` | TCP connection check |\n| `icmp` | Ping check |",
+        "mode": "markdown"
+      },
+      "title": "Blackbox Exporter Setup",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 55},
+      "id": 41,
+      "options": {
+        "content": "## 🔥 k6 Load Testing\n\nRun load tests with Prometheus metrics output.\n\n### Quick Start\n\n```bash\n# Run basic load test\nmake test-load\n\n# Or manually:\ncd testing\ndocker compose --profile test run \\\n  -e TARGET_URL=http://your-app:8080 \\\n  k6 run /scripts/basic-load.js\n```\n\n### Available Scripts\n\n| Script | Description |\n|--------|-------------|\n| `basic-load.js` | Standard load with stages |\n| `stress-test.js` | Find breaking point |\n| `spike-test.js` | Sudden traffic spikes |\n| `api-load.js` | Multi-endpoint API test |\n\n### Custom Test\n\n```bash\ndocker compose --profile test run \\\n  -v /path/to/script.js:/scripts/custom.js \\\n  k6 run /scripts/custom.js\n```\n\n📊 Metrics appear here automatically during tests!",
+        "mode": "markdown"
+      },
+      "title": "k6 Load Testing Setup",
+      "type": "text"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["oib", "latency", "blackbox", "k6", "probing"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "OIB - Request Latency",
+  "uid": "oib-request-latency",
+  "version": 1
+}

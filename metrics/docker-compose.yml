@@ -119,6 +119,33 @@ services:
         reservations:
           memory: 128M
 
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: oib-blackbox-exporter
+    ports:
+      - "127.0.0.1:${BLACKBOX_PORT:-9115}:9115"
+    volumes:
+      - ./config/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    networks:
+      - oib-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9115/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          memory: 32M
+
 volumes:
   oib-prometheus-data:
     name: oib-prometheus-data

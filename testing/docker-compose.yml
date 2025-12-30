@@ -1,0 +1,33 @@
+name: oib-testing
+
+services:
+  k6:
+    image: grafana/k6:0.48.0
+    container_name: oib-k6
+    volumes:
+      - ./scripts:/scripts:ro
+    environment:
+      - K6_OUT=experimental-prometheus-rw
+      - K6_PROMETHEUS_RW_SERVER_URL=http://oib-prometheus:9090/api/v1/write
+      - K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true
+    networks:
+      - oib-network
+    # k6 exits after test, so no restart policy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          memory: 128M
+    profiles:
+      - test  # Only run with --profile test
+    # Override command when running specific tests
+    # docker compose --profile test run k6 run /scripts/basic-load.js
+    command: ["run", "/scripts/basic-load.js"]
+
+networks:
+  oib-network:
+    external: true

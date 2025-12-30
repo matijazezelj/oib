@@ -1,0 +1,93 @@
+# Blackbox Exporter Configuration
+# Probe endpoints for HTTP, TCP, ICMP, DNS checks
+
+modules:
+  # HTTP probe - check if endpoint returns 2xx
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: []  # Defaults to 2xx
+      method: GET
+      follow_redirects: true
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      tls_config:
+        insecure_skip_verify: true
+
+  # HTTP probe with POST method
+  http_post_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: POST
+      valid_status_codes: [200, 201, 202, 204]
+
+  # HTTP probe expecting specific content
+  http_2xx_content:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      fail_if_body_not_matches_regexp:
+        - "healthy|ok|success"
+
+  # HTTPS probe with certificate validation
+  https_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      method: GET
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: false
+
+  # TCP probe - check if port is open
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  # TCP with TLS
+  tcp_tls:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      tls: true
+      tls_config:
+        insecure_skip_verify: true
+
+  # ICMP probe - ping
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip4
+
+  # DNS probe - check DNS resolution
+  dns_lookup:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: "google.com"
+      query_type: "A"
+      valid_rcodes:
+        - NOERROR
+
+  # gRPC probe - check gRPC health
+  grpc:
+    prober: grpc
+    timeout: 5s
+    grpc:
+      tls: false
+
+  # gRPC with TLS
+  grpc_tls:
+    prober: grpc
+    timeout: 5s
+    grpc:
+      tls: true
+      tls_config:
+        insecure_skip_verify: true

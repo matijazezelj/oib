@@ -6,7 +6,8 @@
         status info info-grafana info-logging info-metrics info-telemetry \
         logs logs-grafana logs-logging logs-metrics logs-telemetry \
         network health doctor check-ports update clean ps validate \
-        open disk-usage version demo demo-examples bootstrap
+        open disk-usage version demo demo-examples bootstrap \
+        test-load test-stress test-spike test-api
 
 # Colors
 CYAN := \033[36m
@@ -37,6 +38,9 @@ help: ## Show this help message
 	@echo ""
 	@echo "$(CYAN)Health & Diagnostics:$(RESET)"
 	@grep -E '^(health|doctor|check-ports|ps|validate):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(CYAN)Load Testing:$(RESET)"
+	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
 	@grep -E '^(open|disk-usage|version|demo|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -572,3 +576,36 @@ bootstrap: ## Install all stacks, generate demo data, and open Grafana
 	@$(MAKE) --no-print-directory install
 	@$(MAKE) --no-print-directory demo
 	@$(MAKE) --no-print-directory open
+
+# ==================== Load Testing ====================
+
+test-load: network ## Run k6 basic load test against Grafana
+	@echo "$(CYAN)🔥 Running k6 basic load test...$(RESET)"
+	@echo "$(YELLOW)Target: http://oib-grafana:3000$(RESET)"
+	@echo ""
+	@cd testing && $(DOCKER_COMPOSE) --profile test run --rm k6 run /scripts/basic-load.js
+	@echo ""
+	@echo "$(GREEN)✓ Load test complete. Check the Request Latency dashboard in Grafana.$(RESET)"
+
+test-stress: network ## Run k6 stress test to find breaking point
+	@echo "$(CYAN)🔥 Running k6 stress test...$(RESET)"
+	@echo "$(YELLOW)⚠️  This will push your system to its limits$(RESET)"
+	@echo ""
+	@cd testing && $(DOCKER_COMPOSE) --profile test run --rm k6 run /scripts/stress-test.js
+	@echo ""
+	@echo "$(GREEN)✓ Stress test complete. Check the Request Latency dashboard in Grafana.$(RESET)"
+
+test-spike: network ## Run k6 spike test for sudden traffic
+	@echo "$(CYAN)⚡ Running k6 spike test...$(RESET)"
+	@echo "$(YELLOW)Simulating sudden traffic spikes$(RESET)"
+	@echo ""
+	@cd testing && $(DOCKER_COMPOSE) --profile test run --rm k6 run /scripts/spike-test.js
+	@echo ""
+	@echo "$(GREEN)✓ Spike test complete. Check the Request Latency dashboard in Grafana.$(RESET)"
+
+test-api: network ## Run k6 API load test
+	@echo "$(CYAN)📡 Running k6 API load test...$(RESET)"
+	@echo ""
+	@cd testing && $(DOCKER_COMPOSE) --profile test run --rm k6 run /scripts/api-load.js
+	@echo ""
+	@echo "$(GREEN)✓ API test complete. Check the Request Latency dashboard in Grafana.$(RESET)"

@@ -21,6 +21,17 @@ From the repo root, you can start all example apps and generate traffic:
 make demo-examples
 ```
 
+## 📊 Pre-built Dashboards
+
+OIB comes with dashboards ready to visualize your data:
+
+| Dashboard | Description |
+|-----------|-------------|
+| **System Overview** | Host metrics, container CPU/memory, disk usage |
+| **Logs Explorer** | Log volume, live logs, errors/warnings panel |
+| **Traces Explorer** | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
+| **Request Latency** | Endpoint health, probe latency, k6 load test metrics |
+
 ## Quick Integration
 
 ### 1. Add logging to your containers
@@ -388,3 +399,166 @@ for i in {1..10}; do
   curl -s http://localhost:3005/api/error 2>/dev/null
 done
 ```
+
+---
+
+## 🔍 Blackbox Exporter (Endpoint Probing)
+
+OIB includes [Blackbox Exporter](https://github.com/prometheus/blackbox_exporter) for synthetic monitoring - probing your endpoints from the outside.
+
+### What It Does
+
+- HTTP/HTTPS endpoint health checks
+- TCP port connectivity tests
+- ICMP ping checks
+- DNS resolution tests
+- SSL certificate validation
+
+### Default Monitored Endpoints
+
+By default, Blackbox probes these OIB services:
+- Grafana (`http://oib-grafana:3000/api/health`)
+- Prometheus (`http://oib-prometheus:9090/-/ready`)
+- Loki (`http://oib-loki:3100/ready`)
+- Tempo (`http://oib-tempo:3200/ready`)
+
+### Add Your Own Endpoints
+
+Edit `metrics/config/prometheus.yml` and add targets to the `blackbox-http` job:
+
+```yaml
+- job_name: 'blackbox-http'
+  metrics_path: /probe
+  params:
+    module: [http_2xx]
+  static_configs:
+    - targets:
+      # OIB services (default)
+      - http://oib-grafana:3000/api/health
+      - http://oib-prometheus:9090/-/ready
+      # Add your endpoints
+      - http://your-app:8080/health
+      - https://api.example.com/status
+  relabel_configs:
+    - source_labels: [__address__]
+      target_label: __param_target
+    - source_labels: [__param_target]
+      target_label: instance
+    - target_label: __address__
+      replacement: oib-blackbox-exporter:9115
+```
+
+### Available Probe Modules
+
+| Module | Description |
+|--------|-------------|
+| `http_2xx` | HTTP GET, expect 2xx response |
+| `http_post_2xx` | HTTP POST, expect 2xx response |
+| `http_2xx_content` | HTTP GET + body content match |
+| `https_2xx` | HTTPS with TLS verification |
+| `tcp_connect` | TCP connection check |
+| `tcp_tls` | TCP with TLS handshake |
+| `icmp` | Ping check (requires privileges) |
+| `dns_lookup` | DNS resolution test |
+| `grpc` | gRPC health check |
+
+### Viewing Results
+
+Open Grafana → **Dashboards** → **OIB - Request Latency** to see:
+- Endpoint UP/DOWN status
+- 24h availability percentage
+- Response time by phase (DNS, Connect, TLS, Processing, Transfer)
+- Probe history timeline
+
+---
+
+## 🔥 k6 Load Testing
+
+OIB includes [k6](https://k6.io/) for load testing your applications with real-time metrics in Grafana.
+
+### Quick Start
+
+```bash
+# Run basic load test against Grafana
+make test-load
+
+# Run stress test (find breaking point)
+make test-stress
+
+# Run spike test (sudden traffic)
+make test-spike
+
+# Run API load test
+make test-api
+```
+
+### Test a Custom Target
+
+```bash
+cd testing
+docker compose --profile test run --rm \
+  -e TARGET_URL=http://your-app:8080 \
+  k6 run /scripts/basic-load.js
+```
+
+### Available Test Scripts
+
+| Script | Purpose | Duration | Max VUs |
+|--------|---------|----------|---------|
+| `basic-load.js` | Standard load with stages | ~4 min | 20 |
+| `stress-test.js` | Find system limits | ~13 min | 200 |
+| `spike-test.js` | Sudden traffic spikes | ~5 min | 150 |
+| `api-load.js` | Multi-endpoint API testing | ~2 min | 10 |
+
+### Writing Custom Tests
+
+```javascript
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  stages: [
+    { duration: '30s', target: 10 },  // Ramp up to 10 users
+    { duration: '1m', target: 10 },   // Stay at 10 users
+    { duration: '30s', target: 0 },   // Ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500'],  // 95% of requests < 500ms
+    http_req_failed: ['rate<0.01'],    // Error rate < 1%
+  },
+};
+
+const BASE_URL = __ENV.TARGET_URL || 'http://oib-grafana:3000';
+
+export default function () {
+  const res = http.get(`${BASE_URL}/api/health`);
+  check(res, { 'status is 200': (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+### Viewing Results
+
+k6 metrics are automatically sent to Prometheus. View them in:
+
+**Grafana** → **Dashboards** → **OIB - Request Latency** → "k6 Load Test Metrics" section
+
+Key metrics:
+- **Virtual Users (VUs)**: Active concurrent users
+- **Request Rate**: Requests per second
+- **Error Rate**: Percentage of failed requests
+- **HTTP Duration**: Latency percentiles (p50, p90, p95, p99)
+- **Timing Breakdown**: Blocked, Connecting, TLS, Sending, Waiting, Receiving
+
+### Docker Network
+
+k6 runs on `oib-network`, so you can test any container using internal hostnames:
+
+| Service | Internal URL |
+|---------|--------------|
+| Example Flask | `http://oib-example-python:5000` |
+| Example Express | `http://oib-example-node:3000` |
+| Example Rails | `http://oib-example-ruby:3000` |
+| Example Laravel | `http://oib-example-php:80` |
+
+See the [testing/README.md](../testing/README.md) for more details.
