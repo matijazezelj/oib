@@ -1,6 +1,6 @@
 theme: jekyll-theme-cayman
 title: Observability in a Box
-description: A plug-and-play observability stack for developers and homelabs. Clone, run, and get instant observability using Grafana's LGTM stack.
+description: A plug-and-play observability stack for developers. Zero config, production-ready patterns. Get instant observability using Grafana's LGTM stack.
 show_downloads: false
 baseurl: "/oib"
 url: "https://matijazezelj.github.io"

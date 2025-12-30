@@ -5,7 +5,7 @@ title: Observability in a Box
 
 # 🔭 Observability in a Box
 
-**A plug-and-play observability stack for developers and homelabs.**
+**A plug-and-play observability stack for developers. Zero config, production-ready patterns.**
 
 Clone, run `make install`, and get instant observability for your projects using Grafana's LGTM stack (Loki, Grafana, Tempo, Prometheus).
 
@@ -136,14 +136,14 @@ I get it. I've set this up dozens of times and it still takes me a few hours to 
 
 It's a single repo that gives you the complete Grafana LGTM stack configured and ready to go. Clone it, run `make install`, and you have production-grade observability.
 
-The whole thing runs in Docker. It's designed for homelabs but the patterns scale — this is the same stack running in production at companies you've heard of.
+The whole thing runs in Docker. It's designed for local development and self-hosted environments, but the patterns scale — this is the same stack running in production at companies you've heard of.
 
 ---
 
 ## 👥 Who This Is For
 
 - **Developers** who want to understand how their app behaves without becoming observability experts
-- **Homelab enthusiasts** who want proper monitoring without the enterprise complexity
+- **Self-hosters** who want proper monitoring without the enterprise complexity
 - **Small teams** who need observability but don't have dedicated SRE staff
 - **Anyone learning** about metrics, logs, and traces in a hands-on way
 

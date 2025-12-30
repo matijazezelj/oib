@@ -1,6 +1,6 @@
 # Observability in a Box (OIB)
 
-A plug-and-play observability stack for homelab users. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
+A plug-and-play observability stack for developers. Zero config, production-ready patterns. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
 > **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!  
 > **One-command path**: `make bootstrap`
 ## � Prerequisites
@@ -413,7 +413,7 @@ All stacks run on a shared Docker network `oib-network` allowing inter-service c
 
 ## 🔒 Security
 
-OIB includes security hardening for homelab use:
+OIB includes security hardening for local and self-hosted deployments:
 
 - **No default passwords**: Grafana credentials configured via `.env` file
 - **Localhost binding**: Internal services (Prometheus, Loki, Tempo, etc.) only listen on `127.0.0.1`

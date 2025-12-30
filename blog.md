@@ -45,7 +45,7 @@ It's a single repo that gives you the complete Grafana LGTM stack (Loki, Grafana
 - **Traces**: Tempo with OTLP endpoints ready to receive spans
 - **Dashboards**: Pre-built Grafana dashboards for system overview, logs, and traces
 
-The whole thing runs in Docker. It's designed for homelabs but the patterns scale — this is the same stack running in production at companies you've heard of.
+The whole thing runs in Docker. It's designed for local development and self-hosted environments, but the patterns scale — this is the same stack running in production at companies you've heard of.
 
 ## What You Get
 
@@ -67,7 +67,7 @@ The repo includes working examples in Python, Node.js, Ruby, and PHP showing exa
 ## Who This Is For
 
 - **Developers** who want to understand how their app behaves without becoming observability experts
-- **Homelab enthusiasts** who want proper monitoring without the enterprise complexity
+- **Self-hosters** who want proper monitoring without the enterprise complexity
 - **Small teams** who need observability but don't have dedicated SRE staff
 - **Anyone learning** about metrics, logs, and traces in a hands-on way
 
