@@ -46,7 +46,7 @@ help: ## Show this help message
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
-	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Cleanup:$(RESET)"
 	@grep -E '^uninstall[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -474,6 +474,41 @@ update-telemetry: ## Pull latest telemetry images (Tempo, Alloy) and restart
 	@echo "$(CYAN)Restarting telemetry stack...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) up -d
 	@echo "$(GREEN)✓ Telemetry stack updated$(RESET)"
+
+latest: ## Pull and run :latest versions of all images
+	@echo "$(BOLD)🔄 Pulling :latest images...$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Grafana:$(RESET)"
+	@docker pull grafana/grafana:latest
+	@echo "$(CYAN)Loki:$(RESET)"
+	@docker pull grafana/loki:latest
+	@echo "$(CYAN)Alloy:$(RESET)"
+	@docker pull grafana/alloy:latest
+	@echo "$(CYAN)Prometheus:$(RESET)"
+	@docker pull prom/prometheus:latest
+	@echo "$(CYAN)Pushgateway:$(RESET)"
+	@docker pull prom/pushgateway:latest
+	@echo "$(CYAN)Node Exporter:$(RESET)"
+	@docker pull prom/node-exporter:latest
+	@echo "$(CYAN)Blackbox Exporter:$(RESET)"
+	@docker pull prom/blackbox-exporter:latest
+	@echo "$(CYAN)cAdvisor:$(RESET)"
+	@docker pull gcr.io/cadvisor/cadvisor:latest
+	@echo "$(CYAN)Tempo:$(RESET)"
+	@docker pull grafana/tempo:latest
+	@echo ""
+	@echo "$(CYAN)Stopping current containers...$(RESET)"
+	@$(MAKE) --no-print-directory stop 2>/dev/null || true
+	@echo ""
+	@echo "$(CYAN)Starting with :latest images...$(RESET)"
+	@GRAFANA_VERSION=latest LOKI_VERSION=latest ALLOY_VERSION=latest \
+		PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest \
+		BLACKBOX_VERSION=latest CADVISOR_VERSION=latest TEMPO_VERSION=latest \
+		$(MAKE) --no-print-directory start
+	@echo ""
+	@echo "$(GREEN)$(BOLD)✓ All stacks running with :latest images$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Note: To revert to pinned versions, run: make restart$(RESET)"
 
 clean: ## Remove unused Docker resources (images, networks, volumes)
 	@echo "$(CYAN)Cleaning up unused Docker resources...$(RESET)"

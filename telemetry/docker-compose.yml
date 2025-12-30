@@ -2,7 +2,7 @@ name: oib-telemetry
 
 services:
   tempo:
-    image: grafana/tempo:2.6.1
+    image: grafana/tempo:${TEMPO_VERSION:-2.6.1}
     container_name: oib-tempo
     env_file:
       - ../.env
@@ -32,7 +32,7 @@ services:
           memory: 256M
 
   alloy:
-    image: grafana/alloy:v1.5.1
+    image: grafana/alloy:${ALLOY_VERSION:-v1.5.1}
     container_name: oib-alloy-telemetry
     ports:
       - "${OTEL_GRPC_PORT:-4317}:4317"   # OTLP gRPC (external apps need this)

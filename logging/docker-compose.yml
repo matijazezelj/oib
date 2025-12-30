@@ -2,7 +2,7 @@ name: oib-logging
 
 services:
   loki:
-    image: grafana/loki:3.3.2
+    image: grafana/loki:${LOKI_VERSION:-3.3.2}
     container_name: oib-loki
     env_file:
       - ../.env
@@ -31,7 +31,7 @@ services:
           memory: 256M
 
   alloy:
-    image: grafana/alloy:v1.5.1
+    image: grafana/alloy:${ALLOY_VERSION:-v1.5.1}
     container_name: oib-alloy-logging
     ports:
       - "127.0.0.1:${ALLOY_LOGGING_PORT:-12345}:12345"   # Alloy UI

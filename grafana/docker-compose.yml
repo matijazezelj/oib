@@ -2,7 +2,7 @@ name: oib-grafana
 
 services:
   grafana:
-    image: grafana/grafana:11.3.1
+    image: grafana/grafana:${GRAFANA_VERSION:-11.3.1}
     container_name: oib-grafana
     env_file:
       - ../.env

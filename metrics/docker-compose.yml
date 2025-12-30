@@ -2,7 +2,7 @@ name: oib-metrics
 
 services:
   prometheus:
-    image: prom/prometheus:v2.48.1
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v2.48.1}
     container_name: oib-prometheus
     env_file:
       - ../.env
@@ -42,7 +42,7 @@ services:
           memory: 256M
 
   pushgateway:
-    image: prom/pushgateway:v1.6.2
+    image: prom/pushgateway:${PUSHGATEWAY_VERSION:-v1.6.2}
     container_name: oib-pushgateway
     ports:
       - "127.0.0.1:${PUSHGATEWAY_PORT:-9091}:9091"
@@ -60,7 +60,7 @@ services:
           memory: 32M
 
   node-exporter:
-    image: prom/node-exporter:v1.7.0
+    image: prom/node-exporter:${NODE_EXPORTER_VERSION:-v1.7.0}
     container_name: oib-node-exporter
     ports:
       - "127.0.0.1:${NODE_EXPORTER_PORT:-9100}:9100"
@@ -87,7 +87,7 @@ services:
           memory: 32M
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.47.2}
     container_name: oib-cadvisor
     ports:
       - "127.0.0.1:${CADVISOR_PORT:-8080}:8080"
@@ -121,7 +121,7 @@ services:
           memory: 128M
 
   blackbox-exporter:
-    image: prom/blackbox-exporter:v0.25.0
+    image: prom/blackbox-exporter:${BLACKBOX_VERSION:-v0.25.0}
     container_name: oib-blackbox-exporter
     ports:
       - "127.0.0.1:${BLACKBOX_PORT:-9115}:9115"
