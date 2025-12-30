@@ -626,18 +626,21 @@ demo-traffic: ## Generate traffic to demo app for realistic traces
 	@echo ""
 	@for i in $$(seq 1 50); do \
 		echo -n "."; \
+		USER_ID=$$(( ($$i % 3) + 1 )); \
+		ITEM_ID=$$(( ($$i % 5) + 1 )); \
+		ITEM_ID2=$$(( (($$i + 2) % 5) + 1 )); \
 		curl -s http://localhost:5000/ >/dev/null; \
 		curl -s http://localhost:5000/health >/dev/null; \
 		curl -s http://localhost:5000/users >/dev/null; \
-		curl -s "http://localhost:5000/users/$$(($$RANDOM % 3 + 1))" >/dev/null; \
+		curl -s "http://localhost:5000/users/$$USER_ID" >/dev/null; \
 		curl -s http://localhost:5000/items >/dev/null; \
-		curl -s "http://localhost:5000/items/$$(($$RANDOM % 5 + 1))" >/dev/null; \
+		curl -s "http://localhost:5000/items/$$ITEM_ID" >/dev/null; \
 		curl -s -X POST -H "Content-Type: application/json" \
-			-d "{\"user_id\": $$(($$RANDOM % 3 + 1)), \"item_ids\": [$$(($$RANDOM % 5 + 1)), $$(($$RANDOM % 5 + 1))]}" \
+			-d "{\"user_id\": $$USER_ID, \"item_ids\": [$$ITEM_ID, $$ITEM_ID2]}" \
 			http://localhost:5000/orders >/dev/null; \
 		curl -s http://localhost:5000/orders >/dev/null; \
 		curl -s http://localhost:5000/slow >/dev/null; \
-		if [ $$(($$i % 10)) -eq 0 ]; then \
+		if [ $$(( $$i % 10 )) -eq 0 ]; then \
 			curl -s http://localhost:5000/error >/dev/null 2>&1 || true; \
 		fi; \
 		sleep 0.1; \
