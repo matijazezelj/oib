@@ -1,0 +1,85 @@
+name: oib-demo-app
+
+services:
+  demo-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oib-demo-app
+    environment:
+      - OTEL_SERVICE_NAME=oib-demo-app
+      - OTEL_EXPORTER_OTLP_ENDPOINT=oib-alloy-telemetry:4317
+      - POSTGRES_HOST=oib-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-oib}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-oib_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-oib_demo}
+      - REDIS_HOST=oib-redis
+      - REDIS_PORT=6379
+    ports:
+      - "127.0.0.1:${DEMO_APP_PORT:-5000}:5000"
+    networks:
+      - oib-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  # Include services from the services stack
+  postgres:
+    image: postgres:16-alpine
+    container_name: oib-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oib}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oib_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-oib_demo}
+    volumes:
+      - oib-postgres-data:/var/lib/postgresql/data
+      - ../../services/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - oib-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oib} -d ${POSTGRES_DB:-oib_demo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: oib-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - oib-redis-data:/data
+    networks:
+      - oib-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  oib-postgres-data:
+  oib-redis-data:
+
+networks:
+  oib-network:
+    external: true

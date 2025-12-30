@@ -6,7 +6,7 @@
         status info info-grafana info-logging info-metrics info-telemetry \
         logs logs-grafana logs-logging logs-metrics logs-telemetry \
         network health doctor check-ports update clean ps validate \
-        open disk-usage version demo demo-examples bootstrap \
+        open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api
 
 # Colors
@@ -43,7 +43,7 @@ help: ## Show this help message
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
-	@grep -E '^(open|disk-usage|version|demo|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
 	@grep -E '^(update|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -570,6 +570,92 @@ demo-examples: ## Run example apps and generate traffic for all languages
 	@echo ""
 	@echo "$(GREEN)$(BOLD)Example traffic generated!$(RESET) Explore in Grafana:"
 	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo ""
+
+demo-app: ## Start demo app with PostgreSQL & Redis (realistic traces)
+	@echo ""
+	@echo "$(BOLD)🚀 Starting Demo App with PostgreSQL & Redis...$(RESET)"
+	@echo ""
+	@$(MAKE) --no-print-directory network
+	@cd examples/demo-app && $(DOCKER_COMPOSE) up -d --build
+	@echo ""
+	@echo "$(CYAN)Waiting for services...$(RESET)"
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do \
+		if curl -sf http://localhost:5000/health >/dev/null 2>&1; then \
+			echo "  $(GREEN)✓$(RESET) Demo app is ready!"; \
+			break; \
+		fi; \
+		sleep 1; \
+	done
+	@echo ""
+	@echo "$(GREEN)$(BOLD)Demo App Started!$(RESET)"
+	@echo ""
+	@echo "  $(CYAN)App URL:$(RESET)      http://localhost:5000"
+	@echo "  $(CYAN)PostgreSQL:$(RESET)   localhost:5432 (oib/oib_secret)"
+	@echo "  $(CYAN)Redis:$(RESET)        localhost:6379"
+	@echo ""
+	@echo "$(CYAN)API Endpoints:$(RESET)"
+	@echo "  GET  /           - API documentation"
+	@echo "  GET  /health     - Health check (DB + Redis)"
+	@echo "  GET  /users      - List users (DB query)"
+	@echo "  GET  /users/:id  - Get user with items (multiple queries)"
+	@echo "  GET  /items      - List items (cached in Redis)"
+	@echo "  GET  /items/:id  - Get item with view counter (Redis incr)"
+	@echo "  POST /orders     - Create order (transaction)"
+	@echo "  GET  /orders     - List orders"
+	@echo "  GET  /slow       - Slow endpoint (DB + cache)"
+	@echo "  GET  /error      - Simulated errors"
+	@echo ""
+	@echo "$(YELLOW)Run 'make demo-traffic' to generate realistic traffic$(RESET)"
+	@echo ""
+
+demo-app-stop: ## Stop demo app and clean up
+	@echo "$(CYAN)Stopping Demo App...$(RESET)"
+	@cd examples/demo-app && $(DOCKER_COMPOSE) down -v
+	@echo "$(GREEN)✓$(RESET) Demo app stopped"
+
+demo-traffic: ## Generate traffic to demo app for realistic traces
+	@echo ""
+	@echo "$(BOLD)🔥 Generating Demo Traffic...$(RESET)"
+	@echo ""
+	@if ! curl -sf http://localhost:5000/health >/dev/null 2>&1; then \
+		echo "$(RED)✗$(RESET) Demo app not running. Start with: make demo-app"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Generating 50 requests with realistic patterns...$(RESET)"
+	@echo ""
+	@for i in $$(seq 1 50); do \
+		echo -n "."; \
+		curl -s http://localhost:5000/ >/dev/null; \
+		curl -s http://localhost:5000/health >/dev/null; \
+		curl -s http://localhost:5000/users >/dev/null; \
+		curl -s "http://localhost:5000/users/$$(($$RANDOM % 3 + 1))" >/dev/null; \
+		curl -s http://localhost:5000/items >/dev/null; \
+		curl -s "http://localhost:5000/items/$$(($$RANDOM % 5 + 1))" >/dev/null; \
+		curl -s -X POST -H "Content-Type: application/json" \
+			-d "{\"user_id\": $$(($$RANDOM % 3 + 1)), \"item_ids\": [$$(($$RANDOM % 5 + 1)), $$(($$RANDOM % 5 + 1))]}" \
+			http://localhost:5000/orders >/dev/null; \
+		curl -s http://localhost:5000/orders >/dev/null; \
+		curl -s http://localhost:5000/slow >/dev/null; \
+		if [ $$(($$i % 10)) -eq 0 ]; then \
+			curl -s http://localhost:5000/error >/dev/null 2>&1 || true; \
+		fi; \
+		sleep 0.1; \
+	done
+	@echo ""
+	@echo ""
+	@echo "$(GREEN)$(BOLD)Traffic generation complete!$(RESET)"
+	@echo ""
+	@echo "Open Grafana to explore traces:"
+	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo ""
+	@echo "  $(CYAN)Traces:$(RESET)  Explore → Tempo → Service: oib-demo-app"
+	@echo "  $(CYAN)Logs:$(RESET)    Explore → Loki → {container_name=\"oib-demo-app\"}"
+	@echo ""
+	@echo "Look for multi-span traces showing:"
+	@echo "  • HTTP request → PostgreSQL queries"
+	@echo "  • HTTP request → Redis cache hit/miss"
+	@echo "  • Transaction spans (order creation)"
 	@echo ""
 
 bootstrap: ## Install all stacks, generate demo data, and open Grafana

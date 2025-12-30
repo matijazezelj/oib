@@ -1,0 +1,66 @@
+name: oib-services
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oib-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oib}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oib_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-oib_demo}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - oib-postgres-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - oib-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oib} -d ${POSTGRES_DB:-oib_demo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  redis:
+    image: redis:7-alpine
+    container_name: oib-redis
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - oib-redis-data:/data
+    networks:
+      - oib-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 64M
+
+volumes:
+  oib-postgres-data:
+  oib-redis-data:
+
+networks:
+  oib-network:
+    external: true

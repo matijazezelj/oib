@@ -1,0 +1,11 @@
+flask>=2.3.0
+prometheus-client>=0.19.0
+opentelemetry-api>=1.21.0
+opentelemetry-sdk>=1.21.0
+opentelemetry-exporter-otlp>=1.21.0
+opentelemetry-instrumentation-flask>=0.42b0
+opentelemetry-instrumentation-redis>=0.42b0
+opentelemetry-instrumentation-psycopg2>=0.42b0
+redis>=5.0.0
+psycopg2-binary>=2.9.9
+structlog>=23.2.0
