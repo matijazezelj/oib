@@ -1,12 +1,20 @@
-# Observability in a Box
+---
+layout: default
+title: Observability in a Box
+---
+
+# 🔭 Observability in a Box
 
 **A plug-and-play observability stack for developers and homelabs.**
 
 Clone, run `make install`, and get instant observability for your projects using Grafana's LGTM stack (Loki, Grafana, Tempo, Prometheus).
 
+<a href="https://github.com/matijazezelj/oib" class="btn">View on GitHub</a>
+<a href="https://github.com/matijazezelj/oib#-quick-start" class="btn">Documentation</a>
+
 ---
 
-## Quick Start
+## ⚡ Quick Start
 
 ```bash
 # Clone and configure
@@ -23,7 +31,7 @@ That's it. Open [http://localhost:3000](http://localhost:3000) and start explori
 
 ---
 
-## What's Included
+## 📦 What's Included
 
 | Stack | Components | What It Does |
 |-------|------------|--------------|
@@ -35,7 +43,7 @@ That's it. Open [http://localhost:3000](http://localhost:3000) and start explori
 
 ---
 
-## Integration Endpoints
+## 🔌 Integration Endpoints
 
 Once installed, your applications can send data to:
 
@@ -48,7 +56,7 @@ Once installed, your applications can send data to:
 
 ---
 
-## Pre-built Dashboards
+## 📊 Pre-built Dashboards
 
 OIB comes with four ready-to-use Grafana dashboards:
 
@@ -59,7 +67,7 @@ OIB comes with four ready-to-use Grafana dashboards:
 
 ---
 
-## The Story Behind OIB
+## 📖 The Story Behind OIB
 
 I've spent 25 years in infrastructure. Started as a sysadmin, moved through DevOps, now I'm in SecOps. Along the way I've worked on systems handling petabytes of data and hundreds of thousands of requests per second.
 
@@ -103,7 +111,7 @@ The whole thing runs in Docker. It's designed for homelabs but the patterns scal
 
 ---
 
-## Who This Is For
+## 👥 Who This Is For
 
 - **Developers** who want to understand how their app behaves without becoming observability experts
 - **Homelab enthusiasts** who want proper monitoring without the enterprise complexity
@@ -112,7 +120,7 @@ The whole thing runs in Docker. It's designed for homelabs but the patterns scal
 
 ---
 
-## Commands Reference
+## 🛠️ Commands Reference
 
 ```bash
 # Installation
@@ -140,7 +148,7 @@ make uninstall            # Remove everything
 
 ---
 
-## Example Integration
+## 💻 Example Integration
 
 ### Python (Flask with OpenTelemetry)
 
@@ -197,7 +205,7 @@ networks:
 
 ---
 
-## The Real Point
+## 💡 The Real Point
 
 Observability shouldn't be a barrier. You shouldn't need to read 50 pages of documentation just to see how much memory your app is using.
 
@@ -207,7 +215,7 @@ I built OIB because I was tired of watching smart people debug production issues
 
 ---
 
-## Links
+## 🔗 Links
 
 - **GitHub Repository**: [github.com/matijazezelj/oib](https://github.com/matijazezelj/oib)
 - **Full Documentation**: [README](https://github.com/matijazezelj/oib#readme)

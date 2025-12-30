@@ -1,6 +1,6 @@
-theme: jekyll-theme-minimal
-title: Observability in a Box (OIB)
+theme: jekyll-theme-cayman
+title: Observability in a Box
 description: A plug-and-play observability stack for developers and homelabs. Clone, run, and get instant observability using Grafana's LGTM stack.
-show_downloads: true
-google_analytics:
-baseurl: ""
+show_downloads: false
+baseurl: "/oib"
+url: "https://matijazezelj.github.io"
