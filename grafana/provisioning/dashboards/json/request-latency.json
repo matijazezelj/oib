@@ -240,7 +240,7 @@
       "gridPos": {"h": 7, "w": 8, "x": 16, "y": 24},
       "id": 22,
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "rate(k6_http_req_failed_total[1m]) / rate(k6_http_reqs_total[1m])", "legendFormat": "Error Rate", "refId": "A"}],
+      "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_failed_rate", "legendFormat": "Error Rate", "refId": "A"}],
       "title": "Error Rate",
       "type": "timeseries"
     },
@@ -258,10 +258,8 @@
       "id": 23,
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "targets": [
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p50", "refId": "A"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.90, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p90", "refId": "B"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p95", "refId": "C"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, rate(k6_http_req_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p99", "refId": "D"}
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_duration_p99 * 1000", "legendFormat": "p99", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_request_duration_p99 * 1000", "legendFormat": "Request p99", "refId": "B"}
       ],
       "title": "HTTP Request Duration Percentiles",
       "type": "timeseries"
@@ -280,14 +278,14 @@
       "id": 24,
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "targets": [
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_blocked_seconds_bucket[1m])) * 1000", "legendFormat": "Blocked", "refId": "A"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_connecting_seconds_bucket[1m])) * 1000", "legendFormat": "Connecting", "refId": "B"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_tls_handshaking_seconds_bucket[1m])) * 1000", "legendFormat": "TLS Handshake", "refId": "C"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_sending_seconds_bucket[1m])) * 1000", "legendFormat": "Sending", "refId": "D"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_waiting_seconds_bucket[1m])) * 1000", "legendFormat": "Waiting (TTFB)", "refId": "E"},
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, rate(k6_http_req_receiving_seconds_bucket[1m])) * 1000", "legendFormat": "Receiving", "refId": "F"}
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_blocked_p99 * 1000", "legendFormat": "Blocked", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_connecting_p99 * 1000", "legendFormat": "Connecting", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_tls_handshaking_p99 * 1000", "legendFormat": "TLS Handshake", "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_sending_p99 * 1000", "legendFormat": "Sending", "refId": "D"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_waiting_p99 * 1000", "legendFormat": "Waiting (TTFB)", "refId": "E"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "k6_http_req_receiving_p99 * 1000", "legendFormat": "Receiving", "refId": "F"}
       ],
-      "title": "HTTP Request Timing Breakdown (p95)",
+      "title": "HTTP Request Timing Breakdown (p99)",
       "type": "timeseries"
     },
     {
