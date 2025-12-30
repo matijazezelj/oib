@@ -20,6 +20,7 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-remote-write-receiver'
+      - '--enable-feature=native-histograms'
     networks:
       - oib-network
     extra_hosts:

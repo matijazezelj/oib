@@ -9,7 +9,8 @@ services:
     environment:
       - K6_OUT=experimental-prometheus-rw
       - K6_PROMETHEUS_RW_SERVER_URL=http://oib-prometheus:9090/api/v1/write
-      - K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true
+      - K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=false
+      - K6_PROMETHEUS_RW_STALE_MARKERS=true
     networks:
       - oib-network
     # k6 exits after test, so no restart policy
