@@ -17,8 +17,8 @@ RED := \033[31m
 RESET := \033[0m
 BOLD := \033[1m
 
-# Docker compose command
-DOCKER_COMPOSE := docker compose
+# Docker compose command - include root .env file for all stacks
+DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env
 
 # Default target
 .DEFAULT_GOAL := help
