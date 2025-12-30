@@ -205,7 +205,112 @@ networks:
 
 ---
 
-## 💡 The Real Point
+## � Running at Scale
+
+OIB handles multiple application instances seamlessly. Here's how to run a scaled deployment:
+
+### Docker Compose with Multiple Instances
+
+```yaml
+services:
+  api:
+    image: my-api:latest
+    deploy:
+      replicas: 3
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
+      - OTEL_SERVICE_NAME=api
+      - OTEL_RESOURCE_ATTRIBUTES=service.instance.id={{.Task.Slot}}
+    networks:
+      - oib-network
+      - default
+
+  worker:
+    image: my-worker:latest
+    deploy:
+      replicas: 5
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
+      - OTEL_SERVICE_NAME=worker
+      - OTEL_RESOURCE_ATTRIBUTES=service.instance.id={{.Task.Slot}}
+    networks:
+      - oib-network
+      - default
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks:
+      - oib-network
+      - default
+
+networks:
+  oib-network:
+    external: true
+```
+
+### Scale with Docker Compose
+
+```bash
+# Start with 3 API instances and 5 workers
+docker compose up -d --scale api=3 --scale worker=5
+
+# Scale up during peak hours
+docker compose up -d --scale api=10 --scale worker=20
+
+# Scale down
+docker compose up -d --scale api=2 --scale worker=3
+```
+
+### What You'll See in Grafana
+
+With multiple instances, OIB gives you:
+
+**Traces** — Each request shows the full journey across instances:
+```
+[nginx] → [api-1] → [worker-3] → [postgres]
+[nginx] → [api-2] → [worker-1] → [redis]
+```
+
+**Metrics** — Per-instance breakdown:
+- CPU/memory usage per container instance
+- Request rate per instance
+- Error rate distribution across instances
+
+**Logs** — Correlated by trace ID:
+```logql
+{service_name="api"} | json | trace_id="abc123"
+```
+
+### Querying Across Instances
+
+**Find slow instances (TraceQL):**
+```
+{ resource.service.name = "api" && duration > 500ms } | by(resource.service.instance.id)
+```
+
+**Compare instance performance (PromQL):**
+```promql
+histogram_quantile(0.95, 
+  sum by (instance, le) (
+    rate(http_request_duration_seconds_bucket{service="api"}[5m])
+  )
+)
+```
+
+**Aggregate logs from all instances:**
+```logql
+{service_name="api"} | json | level="error" | line_format "{{.instance}}: {{.message}}"
+```
+
+---
+
+## �💡 The Real Point
 
 Observability shouldn't be a barrier. You shouldn't need to read 50 pages of documentation just to see how much memory your app is using.
 
