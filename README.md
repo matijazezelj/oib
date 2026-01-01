@@ -234,6 +234,14 @@ make start                # Start all stacks
 make restart              # Restart all stacks
 make info                 # Show integration endpoints
 
+# Logs
+make logs                 # Tail logs from all stacks
+make logs-grafana         # Tail Grafana logs
+make logs-logging         # Tail Loki + Alloy logs
+make logs-metrics         # Tail Prometheus + exporters logs
+make logs-telemetry       # Tail Tempo + Alloy logs
+make logs-profiling       # Tail Pyroscope logs
+
 # Maintenance
 make update               # Pull pinned version images and restart
 make update-grafana       # Update Grafana only
@@ -242,7 +250,6 @@ make update-metrics       # Update Prometheus + exporters
 make update-telemetry     # Update Tempo + Alloy
 make latest               # Pull and run :latest versions of all images
 make clean                # Remove unused Docker resources
-make logs                 # Tail logs from all stacks
 
 # Cleanup
 make uninstall            # Remove all stacks and volumes (with confirmation)
