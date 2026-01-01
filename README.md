@@ -3,11 +3,11 @@
 A plug-and-play observability stack for developers. Zero config, production-ready patterns. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
 > **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!  
 > **One-command path**: `make bootstrap`
-## � Prerequisites
+## 📋 Prerequisites
 
 Before you begin, ensure you have:
 
-- **Docker** 20.10+ ([Install Docker](https://docs.docker.com/get-docker/))
+- **Docker** 20.10+ ([Install Docker](https://docs.docker.com/get-docker/)) or **Podman** 4.0+ with podman-compose
 - **Docker Compose** v2+ (included with Docker Desktop)
 - **Make** (pre-installed on macOS/Linux, [Windows](https://gnuwin32.sourceforge.net/packages/make.htm))
 - **2GB+ RAM** recommended
@@ -15,7 +15,7 @@ Before you begin, ensure you have:
 
 Verify your setup:
 ```bash
-docker --version     # Should be 20.10+
+docker --version     # Should be 20.10+ (or podman --version)
 docker compose version  # Should be v2+
 make --version
 ```
@@ -257,26 +257,26 @@ oib/
 ├── .env.example                # Environment variables template
 ├── logging/
 │   ├── README.md               # Logging stack documentation
-│   ├── docker-compose.yml
+│   ├── compose.yaml
 │   └── config/
 │       ├── loki-config.yml
 │       └── alloy-config.alloy
 ├── metrics/
 │   ├── README.md               # Metrics stack documentation
-│   ├── docker-compose.yml
+│   ├── compose.yaml
 │   └── config/
 │       ├── prometheus.yml
 │       ├── blackbox.yml        # Blackbox exporter probe modules
 │       └── rules/              # Alerting rules (future)
 ├── telemetry/
 │   ├── README.md               # Telemetry stack documentation
-│   ├── docker-compose.yml
+│   ├── compose.yaml
 │   └── config/
 │       ├── tempo.yaml
 │       └── alloy-config.alloy
 ├── grafana/
 │   ├── README.md               # Grafana documentation
-│   ├── docker-compose.yml
+│   ├── compose.yaml
 │   └── provisioning/
 │       ├── datasources/
 │       │   └── datasources.yml
@@ -288,7 +288,7 @@ oib/
 │               └── request-latency.json
 ├── testing/
 │   ├── README.md               # Load testing documentation
-│   ├── docker-compose.yml      # k6 load testing
+│   ├── compose.yaml      # k6 load testing
 │   └── scripts/
 │       ├── basic-load.js
 │       ├── stress-test.js
@@ -324,7 +324,7 @@ cAdvisor collects container metrics automatically. In the System Overview dashbo
 ### Send container logs to Loki
 
 ```yaml
-# In your app's docker-compose.yml
+# In your app's compose.yaml
 services:
   my-app:
     logging:
@@ -441,7 +441,7 @@ Default retention policies (adjust in config files based on storage):
 |-----------|-----------|-------------|
 | Loki (logs) | 7 days | `logging/config/loki-config.yml` |
 | Tempo (traces) | 3 days | `telemetry/config/tempo.yaml` |
-| Prometheus (metrics) | 15 days or 5GB | `metrics/docker-compose.yml` |
+| Prometheus (metrics) | 15 days or 5GB | `metrics/compose.yaml` |
 
 ## 💡 Tips
 
@@ -551,7 +551,7 @@ docker stats
 # Reduce retention in config files:
 # - logging/config/loki-config.yml: retention_period
 # - telemetry/config/tempo.yaml: block_retention
-# - metrics/docker-compose.yml: --storage.tsdb.retention.size
+# - metrics/compose.yaml: --storage.tsdb.retention.size
 ```
 </details>
 

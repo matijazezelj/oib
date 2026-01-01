@@ -388,7 +388,7 @@ info-profiling: ## Show profiling integration info
 
 logs: ## Tail logs from all stacks
 	@echo "$(CYAN)Tailing all stack logs (Ctrl+C to stop)...$(RESET)"
-	@docker compose -f grafana/docker-compose.yml -f logging/docker-compose.yml -f metrics/docker-compose.yml -f telemetry/docker-compose.yml logs -f
+	@docker compose -f grafana/compose.yaml -f logging/compose.yaml -f metrics/compose.yaml -f telemetry/compose.yaml logs -f
 
 logs-grafana: ## Tail Grafana logs
 	@cd grafana && $(DOCKER_COMPOSE) logs -f
@@ -479,7 +479,7 @@ validate: ## Validate configuration files
 	@echo ""
 	@echo "$(CYAN)Checking Docker Compose files...$(RESET)"
 	@for dir in grafana logging metrics telemetry; do \
-		cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null && echo "  $(GREEN)✓$(RESET) $$dir/docker-compose.yml" || echo "  $(RED)✗$(RESET) $$dir/docker-compose.yml has errors"; \
+		cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null && echo "  $(GREEN)✓$(RESET) $$dir/compose.yaml" || echo "  $(RED)✗$(RESET) $$dir/compose.yaml has errors"; \
 		cd ..; \
 	done
 	@echo ""

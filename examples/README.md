@@ -42,7 +42,7 @@ OIB comes with dashboards ready to visualize your data:
 ### 1. Add logging to your containers
 
 ```yaml
-# In your docker-compose.yml
+# In your compose.yaml
 services:
   my-app:
     image: my-app:latest
@@ -135,7 +135,7 @@ docker compose up -d
 
 **Key Files:**
 - `app.py` - Main application with OTEL instrumentation
-- `docker-compose.yml` - Container configuration with OIB network
+- `compose.yaml` - Container configuration with OIB network
 - `requirements.txt` - Python dependencies
 
 **Dependencies:**
@@ -177,7 +177,7 @@ docker compose up -d
 **Key Files:**
 - `tracing.js` - OpenTelemetry setup (loaded via `--require` flag)
 - `app.js` - Main Express application
-- `docker-compose.yml` - Container configuration with OIB network
+- `compose.yaml` - Container configuration with OIB network
 - `package.json` - Node.js dependencies and scripts
 
 **Dependencies:**
@@ -255,7 +255,7 @@ docker compose up -d
 - `config/initializers/opentelemetry.rb` - OpenTelemetry setup
 - `config/initializers/prometheus.rb` - Prometheus metrics setup
 - `app/controllers/` - Controller implementations
-- `docker-compose.yml` - Container configuration with OIB network
+- `compose.yaml` - Container configuration with OIB network
 
 **Dependencies (Gemfile):**
 ```ruby
@@ -318,7 +318,7 @@ docker compose up -d
 - `public/index.php` - Main application with routing
 - `bootstrap/tracing.php` - OpenTelemetry setup
 - `bootstrap/metrics.php` - Prometheus metrics setup
-- `docker-compose.yml` - Container configuration with OIB network
+- `compose.yaml` - Container configuration with OIB network
 
 **Dependencies (composer.json):**
 ```json
@@ -366,7 +366,7 @@ $exporter = new SpanExporter($transport);
 
 ## Environment Variables
 
-All examples use these environment variables (set in docker-compose.yml):
+All examples use these environment variables (set in compose.yaml):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
