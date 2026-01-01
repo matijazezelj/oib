@@ -31,7 +31,7 @@ services:
         reservations:
           memory: 256M
 
-  alloy:
+  alloy-logging:
     image: grafana/alloy:${ALLOY_VERSION:-v1.5.1}
     container_name: oib-alloy-logging
     ports:

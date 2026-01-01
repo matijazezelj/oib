@@ -1,0 +1,95 @@
+#compdef make
+
+# OIB Makefile completions for zsh
+# Install: cp completions/_oib ~/.zsh/completions/_oib && autoload -Uz compinit && compinit
+
+_oib_targets() {
+    local targets
+    targets=(
+        # Installation
+        'install:Install all stacks (logging, metrics, telemetry, grafana)'
+        'install-grafana:Install Grafana only'
+        'install-logging:Install logging stack (Loki + Alloy)'
+        'install-metrics:Install metrics stack (Prometheus + exporters)'
+        'install-telemetry:Install telemetry stack (Tempo + Alloy)'
+        'install-profiling:Install profiling stack (Pyroscope)'
+        
+        # Management
+        'start:Start all stacks'
+        'stop:Stop all stacks'
+        'restart:Restart all stacks'
+        'status:Show status of all services'
+        'info:Show integration endpoints'
+        'logs:Tail logs from all stacks'
+        
+        # Stack-specific
+        'start-grafana:Start Grafana'
+        'stop-grafana:Stop Grafana'
+        'restart-grafana:Restart Grafana'
+        'logs-grafana:Tail Grafana logs'
+        'start-logging:Start logging stack'
+        'stop-logging:Stop logging stack'
+        'restart-logging:Restart logging stack'
+        'logs-logging:Tail logging stack logs'
+        'start-metrics:Start metrics stack'
+        'stop-metrics:Stop metrics stack'
+        'restart-metrics:Restart metrics stack'
+        'logs-metrics:Tail metrics stack logs'
+        'start-telemetry:Start telemetry stack'
+        'stop-telemetry:Stop telemetry stack'
+        'restart-telemetry:Restart telemetry stack'
+        'logs-telemetry:Tail telemetry stack logs'
+        'start-profiling:Start profiling stack'
+        'stop-profiling:Stop profiling stack'
+        'restart-profiling:Restart profiling stack'
+        'logs-profiling:Tail profiling stack logs'
+        
+        # Health & Diagnostics
+        'health:Quick health check of all services'
+        'doctor:Diagnose common issues'
+        'check-ports:Check if required ports are available'
+        'ps:Show running containers'
+        'validate:Validate configuration files'
+        
+        # Demo & Testing
+        'demo:Generate demo data (logs, metrics, traces)'
+        'demo-app:Start the demo application'
+        'demo-traffic:Generate traffic to demo app'
+        'test-load:Run k6 load test'
+        
+        # Utilities
+        'open:Open Grafana in browser'
+        'disk-usage:Show disk space used by OIB'
+        'version:Show versions of all components'
+        'bootstrap:One-command setup (install + demo + open)'
+        
+        # Maintenance
+        'update:Pull latest images and restart'
+        'update-grafana:Update Grafana'
+        'update-logging:Update logging stack'
+        'update-metrics:Update metrics stack'
+        'update-telemetry:Update telemetry stack'
+        'update-profiling:Update profiling stack'
+        'latest:Run all stacks with :latest images'
+        'clean:Remove unused Docker resources'
+        
+        # Cleanup
+        'uninstall:Remove all stacks and volumes'
+        'uninstall-grafana:Remove Grafana'
+        'uninstall-logging:Remove logging stack'
+        'uninstall-metrics:Remove metrics stack'
+        'uninstall-telemetry:Remove telemetry stack'
+        'uninstall-profiling:Remove profiling stack'
+        
+        # Help
+        'help:Show help message'
+    )
+    _describe 'make targets' targets
+}
+
+# Only complete for make in OIB directory (has our Makefile)
+if [[ -f Makefile ]] && grep -q "Observability in a Box" Makefile 2>/dev/null; then
+    _oib_targets
+else
+    _make
+fi
