@@ -575,3 +575,7 @@ PRs welcome! Please follow the existing structure when adding new stacks.
 ## 📄 License
 
 MIT
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=matijazezelj/oib&type=date&legend=top-left)](https://www.star-history.com/#matijazezelj/oib&type=date&legend=top-left)
