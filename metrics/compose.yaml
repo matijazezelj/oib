@@ -41,40 +41,35 @@ services:
         reservations:
           memory: 256M
 
-  pushgateway:
-    image: prom/pushgateway:${PUSHGATEWAY_VERSION:-v1.6.2}
-    container_name: oib-pushgateway
+  alloy-metrics:
+    image: grafana/alloy:${ALLOY_VERSION:-v1.5.1}
+    container_name: oib-alloy-metrics
     ports:
-      - "127.0.0.1:${PUSHGATEWAY_PORT:-9091}:9091"
-    networks:
-      - oib-network
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 128M
-        reservations:
-          memory: 32M
-
-  node-exporter:
-    image: prom/node-exporter:${NODE_EXPORTER_VERSION:-v1.7.0}
-    container_name: oib-node-exporter
-    ports:
-      - "127.0.0.1:${NODE_EXPORTER_PORT:-9100}:9100"
+      - "127.0.0.1:${ALLOY_METRICS_PORT:-12347}:12345"
     volumes:
+      - ./config/alloy-metrics.alloy:/etc/alloy/config.alloy:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
     command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--path.rootfs=/rootfs'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+    environment:
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+      - HOST_ROOT=/rootfs
     networks:
       - oib-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep alloy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -82,9 +77,9 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 128M
+          memory: 256M
         reservations:
-          memory: 32M
+          memory: 64M
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.47.2}
@@ -136,6 +131,33 @@ services:
       - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9115/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          memory: 32M
+
+  # Optional: Pushgateway for batch jobs
+  # Enable with: docker compose --profile pushgateway up -d
+  pushgateway:
+    image: prom/pushgateway:${PUSHGATEWAY_VERSION:-v1.6.2}
+    container_name: oib-pushgateway
+    profiles:
+      - pushgateway
+    ports:
+      - "127.0.0.1:${PUSHGATEWAY_PORT:-9091}:9091"
+    networks:
+      - oib-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -36,7 +36,7 @@ That's it. Open [http://localhost:3000](http://localhost:3000) and start explori
 | Stack | Components | What It Does |
 |-------|------------|--------------|
 | **Logging** | Loki + Alloy | Centralized log aggregation with automatic Docker log collection |
-| **Metrics** | Prometheus + Exporters | Host metrics, container metrics, endpoint probing |
+| **Metrics** | Prometheus + Alloy + cAdvisor | Host metrics via Alloy, container metrics via cAdvisor, endpoint probing |
 | **Tracing** | Tempo + Alloy | Distributed tracing with OpenTelemetry support |
 | **Profiling** | Pyroscope | Continuous profiling (optional: `make install-profiling`) |
 | **Visualization** | Grafana | Pre-built dashboards for all four pillars |
@@ -52,7 +52,6 @@ Once installed, your applications can send data to:
 |-----------|----------|----------|
 | **Traces** | `localhost:4317` | OTLP gRPC |
 | **Traces** | `http://localhost:4318` | OTLP HTTP |
-| **Metrics** | `http://localhost:9091` | Prometheus Pushgateway |
 | **Profiles** | `http://localhost:4040` | Pyroscope SDK (optional) |
 | **Logs** | Automatic | Docker containers are auto-collected |
 
@@ -60,11 +59,13 @@ Once installed, your applications can send data to:
 
 ## 📊 Pre-built Dashboards
 
-OIB comes with four ready-to-use Grafana dashboards:
+OIB comes with six ready-to-use Grafana dashboards:
 
-- **System Overview** — Host metrics, container CPU/memory, disk usage
+- **System Overview** — Container CPU/memory, disk usage, network I/O
+- **Host Metrics** — Detailed host system metrics (CPU, memory, disk, network) via Alloy
 - **Logs Explorer** — Log volume, live logs, errors/warnings panel
 - **Traces Explorer** — TraceQL examples with code samples for Python, Node.js, Ruby, and PHP
+- **Profiles Explorer** — CPU, memory, and goroutine profiling with Pyroscope
 - **Request Latency** — Endpoint probing results and k6 load test metrics
 
 ---
@@ -96,9 +97,19 @@ Endpoint health status, probe latency breakdown, and k6 load test metrics.
 
 ![Request Latency](assets/images/request-latency.png)
 
+### Host Metrics
+Detailed host system metrics: CPU, memory, disk I/O, filesystem, and network.
+
+![Host Metrics](assets/images/host-metrics.png)
+
+### Profiles Explorer
+Continuous profiling with flame graphs to find performance bottlenecks.
+
+![Profiles Explorer](assets/images/profiles-explorer.png)
+
 ---
 
-## �📖 The Story Behind OIB
+## 📖 The Story Behind OIB
 
 I've spent 25 years in infrastructure. Started as a sysadmin, moved through DevOps, now I'm in SecOps. Along the way I've worked on systems handling petabytes of data and hundreds of thousands of requests per second.
 

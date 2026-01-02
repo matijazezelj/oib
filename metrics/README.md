@@ -1,22 +1,20 @@
 # Metrics Stack
 
-Metrics collection and monitoring using Prometheus and exporters.
+Metrics collection and monitoring using Prometheus and Alloy.
 
 ## Components
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **Prometheus** | 9090 (localhost) | Metrics storage and querying |
-| **Pushgateway** | 9091 (localhost) | Push metrics for batch jobs |
-| **Node Exporter** | 9100 (localhost) | Host system metrics |
+| **Alloy** | 12347 (localhost) | Host system metrics collection |
 | **cAdvisor** | 8080 (localhost) | Container metrics |
 | **Blackbox Exporter** | 9115 (localhost) | Endpoint probing |
 
 ## Features
 
 - **Pull-based collection**: Prometheus scrapes metrics endpoints
-- **Push support**: Pushgateway for batch jobs and scripts
-- **Host monitoring**: CPU, memory, disk, network via Node Exporter
+- **Host monitoring**: CPU, memory, disk, network via Alloy (built-in unix exporter)
 - **Container monitoring**: Per-container resources via cAdvisor
 - **Endpoint probing**: HTTP, TCP, ICMP health checks via Blackbox
 
@@ -40,6 +38,11 @@ Edit `config/prometheus.yml`:
 - `scrape_configs`: Define targets to scrape
 - `global.scrape_interval`: How often to scrape (default: 15s)
 
+### Alloy Metrics Configuration
+Edit `config/alloy-metrics.alloy`:
+- `prometheus.exporter.unix`: Configure host metrics collectors
+- `prometheus.remote_write`: Configure Prometheus endpoint
+
 ### Blackbox Configuration
 Edit `config/blackbox.yml`:
 - Define probe modules (http, tcp, icmp, etc.)
@@ -49,15 +52,13 @@ Edit `config/blackbox.yml`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PROMETHEUS_PORT` | `9090` | Prometheus UI/API port |
-| `PUSHGATEWAY_PORT` | `9091` | Pushgateway port |
-| `NODE_EXPORTER_PORT` | `9100` | Node Exporter port |
+| `ALLOY_METRICS_PORT` | `12347` | Alloy metrics UI port |
 | `CADVISOR_PORT` | `8080` | cAdvisor port |
 | `BLACKBOX_PORT` | `9115` | Blackbox Exporter port |
 | `PROMETHEUS_RETENTION_TIME` | `15d` | Data retention time |
 | `PROMETHEUS_RETENTION_SIZE` | `5GB` | Max storage size |
 | `PROMETHEUS_VERSION` | `v2.48.1` | Prometheus image tag |
-| `PUSHGATEWAY_VERSION` | `v1.6.2` | Pushgateway image tag |
-| `NODE_EXPORTER_VERSION` | `v1.7.0` | Node Exporter image tag |
+| `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
 | `CADVISOR_VERSION` | `v0.47.2` | cAdvisor image tag |
 | `BLACKBOX_VERSION` | `v0.25.0` | Blackbox image tag |
 
@@ -76,17 +77,18 @@ scrape_configs:
 
 Then restart: `make restart-metrics`
 
-## Pushing Metrics
+## Optional: Pushgateway
 
-### From Shell Scripts
+For batch jobs that need to push metrics, enable Pushgateway:
+
 ```bash
-# Push a simple metric
+# Start with pushgateway profile
+cd metrics && docker compose --profile pushgateway up -d
+
+# Then push metrics from your scripts
 echo "backup_duration_seconds 42" | curl --data-binary @- \
   http://localhost:9091/metrics/job/backup/instance/server1
 ```
-
-### From Applications
-Use any Prometheus client library to push to `http://localhost:9091`.
 
 ## Endpoint Probing
 
@@ -99,29 +101,28 @@ Blackbox Exporter probes endpoints defined in `config/prometheus.yml`:
     module: [http_2xx]
   static_configs:
     - targets:
-      - http://my-app:8080/health
-      - https://api.example.com
+      - http://your-app:8080/health
   relabel_configs:
     - source_labels: [__address__]
       target_label: __param_target
     - source_labels: [__param_target]
       target_label: instance
     - target_label: __address__
-      replacement: oib-blackbox-exporter:9115
+      replacement: blackbox-exporter:9115
 ```
 
 ## Troubleshooting
 
 ```bash
-# Check Prometheus targets
-open http://localhost:9090/targets
+# Check Prometheus status
+curl http://localhost:9090/-/ready
 
-# Query metrics
-curl 'http://localhost:9090/api/v1/query?query=up'
+# Check Alloy metrics pipeline
+curl http://localhost:12347/-/ready
 
-# Check Pushgateway metrics
-curl http://localhost:9091/metrics
+# View metrics being collected
+curl http://localhost:12347/metrics | grep node_
 
-# View Node Exporter metrics
-curl http://localhost:9100/metrics
+# Check cAdvisor
+curl http://localhost:8080/healthz
 ```

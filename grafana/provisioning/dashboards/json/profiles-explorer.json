@@ -86,7 +86,7 @@
   "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
-  "title": "Profiles Explorer",
+  "title": "OIB - Profiles Explorer",
   "uid": "oib-profiles-explorer",
   "version": 1,
   "weekStart": ""

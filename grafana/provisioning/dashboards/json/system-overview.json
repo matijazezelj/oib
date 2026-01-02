@@ -11,7 +11,7 @@
       "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
       "id": 1,
       "options": {
-        "content": "# 📊 System Overview\n\nHost and container metrics collected by Node Exporter and cAdvisor",
+        "content": "# 📊 System Overview\n\nHost and container metrics collected by Alloy and cAdvisor",
         "mode": "markdown"
       },
       "title": "",

@@ -88,7 +88,6 @@ install: network ## Install all observability stacks
 	@echo ""
 	@echo "  $(BOLD)Open Grafana:$(RESET)       $(YELLOW)http://localhost:3000$(RESET)"
 	@echo "  $(BOLD)Send traces to:$(RESET)     $(YELLOW)localhost:4317$(RESET) (gRPC) or $(YELLOW)localhost:4318$(RESET) (HTTP)"
-	@echo "  $(BOLD)Push metrics to:$(RESET)    $(YELLOW)http://localhost:9091$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Next steps:$(RESET)"
 	@echo "  $(GREEN)make demo$(RESET)      Generate sample data to explore"
@@ -254,15 +253,11 @@ status: ## Show status of all stacks with health indicators
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Prometheus" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-pushgateway; then \
-		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Pushgateway" "running" "$(GREEN)✓ healthy$(RESET)"; \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-alloy-metrics; then \
+		health=$$(curl -sf http://localhost:12347/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (metrics)" "running" "$$health"; \
 	else \
-		printf "  %-20s $(RED)%-12s$(RESET)\n" "Pushgateway" "stopped"; \
-	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-node-exporter; then \
-		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Node Exporter" "running" "$(GREEN)✓ healthy$(RESET)"; \
-	else \
-		printf "  %-20s $(RED)%-12s$(RESET)\n" "Node Exporter" "stopped"; \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (metrics)" "stopped"; \
 	fi
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-cadvisor; then \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "cAdvisor" "running" "$(GREEN)✓ healthy$(RESET)"; \
@@ -334,14 +329,14 @@ info-logging: ## Show logging integration info
 
 info-metrics: ## Show metrics integration info
 	@echo ""
-	@echo "$(BOLD)$(CYAN)📈 METRICS (Prometheus + Exporters)$(RESET)"
+	@echo "$(BOLD)$(CYAN)📈 METRICS (Prometheus + Alloy + cAdvisor)$(RESET)"
 	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Prometheus UI:$(RESET)"
 	@echo "  URL:      $(YELLOW)http://localhost:9090$(RESET)"
 	@echo ""
-	@echo "$(GREEN)Pushgateway:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:9091$(RESET)"
+	@echo "$(GREEN)Alloy Metrics UI:$(RESET)"
+	@echo "  URL:      $(YELLOW)http://localhost:12347$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Add scrape target:$(RESET)"
 	@echo "  Edit $(CYAN)metrics/config/prometheus.yml$(RESET) and add:"
@@ -420,7 +415,7 @@ health: ## Quick health check of all services
 	@echo ""
 	@echo "$(CYAN)Metrics:$(RESET)"
 	@curl -sf http://localhost:9090/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Prometheus is healthy" || echo "  $(RED)✗$(RESET) Prometheus is not responding"
-	@curl -sf http://localhost:9091/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Pushgateway is healthy" || echo "  $(RED)✗$(RESET) Pushgateway is not responding"
+	@curl -sf http://localhost:12347/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (metrics) is healthy" || echo "  $(RED)✗$(RESET) Alloy (metrics) is not responding"
 	@echo ""
 	@echo "$(CYAN)Telemetry:$(RESET)"
 	@curl -sf http://localhost:3200/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Tempo is healthy" || echo "  $(RED)✗$(RESET) Tempo is not responding"
@@ -544,10 +539,6 @@ latest: ## Pull and run :latest versions of all images
 	@docker pull grafana/alloy:latest
 	@echo "$(CYAN)Prometheus:$(RESET)"
 	@docker pull prom/prometheus:latest
-	@echo "$(CYAN)Pushgateway:$(RESET)"
-	@docker pull prom/pushgateway:latest
-	@echo "$(CYAN)Node Exporter:$(RESET)"
-	@docker pull prom/node-exporter:latest
 	@echo "$(CYAN)Blackbox Exporter:$(RESET)"
 	@docker pull prom/blackbox-exporter:latest
 	@echo "$(CYAN)cAdvisor:$(RESET)"
@@ -561,7 +552,7 @@ latest: ## Pull and run :latest versions of all images
 	@echo "$(CYAN)  Logging stack...$(RESET)"
 	@cd logging && LOKI_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Metrics stack...$(RESET)"
-	@cd metrics && PROMETHEUS_VERSION=latest PUSHGATEWAY_VERSION=latest NODE_EXPORTER_VERSION=latest BLACKBOX_VERSION=latest CADVISOR_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@cd metrics && PROMETHEUS_VERSION=latest ALLOY_VERSION=latest BLACKBOX_VERSION=latest CADVISOR_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Telemetry stack...$(RESET)"
 	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Profiling stack...$(RESET)"
@@ -621,9 +612,8 @@ version: ## Show versions of all OIB components
 	@docker inspect oib-prometheus --format '  Prometheus           {{.Config.Image}}' 2>/dev/null || echo "  Prometheus           (not running)"
 	@docker inspect oib-tempo --format '  Tempo                {{.Config.Image}}' 2>/dev/null || echo "  Tempo                (not running)"
 	@docker inspect oib-alloy-logging --format '  Alloy (logging)      {{.Config.Image}}' 2>/dev/null || echo "  Alloy (logging)      (not running)"
+	@docker inspect oib-alloy-metrics --format '  Alloy (metrics)      {{.Config.Image}}' 2>/dev/null || echo "  Alloy (metrics)      (not running)"
 	@docker inspect oib-alloy-telemetry --format '  Alloy (telemetry)    {{.Config.Image}}' 2>/dev/null || echo "  Alloy (telemetry)    (not running)"
-	@docker inspect oib-pushgateway --format '  Pushgateway          {{.Config.Image}}' 2>/dev/null || echo "  Pushgateway          (not running)"
-	@docker inspect oib-node-exporter --format '  Node Exporter        {{.Config.Image}}' 2>/dev/null || echo "  Node Exporter        (not running)"
 	@docker inspect oib-cadvisor --format '  cAdvisor             {{.Config.Image}}' 2>/dev/null || echo "  cAdvisor             (not running)"
 	@echo ""
 
@@ -637,12 +627,7 @@ demo: ## Generate sample data to demonstrate all stacks
 	done
 	@echo "   $(GREEN)✓$(RESET) Created 5 log entries"
 	@echo ""
-	@echo "$(CYAN)2. Pushing sample metrics...$(RESET)"
-	@echo "oib_demo_counter 42" | curl -s --data-binary @- http://localhost:9091/metrics/job/oib_demo >/dev/null 2>&1 && \
-		echo "   $(GREEN)✓$(RESET) Pushed metric to Pushgateway" || \
-		echo "   $(RED)✗$(RESET) Could not push metrics (is Pushgateway running?)"
-	@echo ""
-	@echo "$(CYAN)3. Sending sample trace...$(RESET)"
+	@echo "$(CYAN)2. Sending sample trace...$(RESET)"
 	@curl -s -X POST http://localhost:4318/v1/traces \
 		-H "Content-Type: application/json" \
 		-d '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"oib-demo"}}]},"scopeSpans":[{"spans":[{"traceId":"00000000000000000000000000000001","spanId":"0000000000000001","name":"demo-span","kind":1,"startTimeUnixNano":"1234567890000000000","endTimeUnixNano":"1234567891000000000"}]}]}]}' \
@@ -654,7 +639,7 @@ demo: ## Generate sample data to demonstrate all stacks
 	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
 	@echo ""
 	@echo "  • $(CYAN)Logs:$(RESET)    Explore → Loki → Run query: {}"
-	@echo "  • $(CYAN)Metrics:$(RESET) Explore → Prometheus → oib_demo_counter"
+	@echo "  • $(CYAN)Metrics:$(RESET) Explore → Prometheus → node_cpu_seconds_total"
 	@echo "  • $(CYAN)Traces:$(RESET)  Explore → Tempo → Search for 'oib-demo'"
 	@echo ""
 

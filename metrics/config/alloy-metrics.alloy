@@ -1,0 +1,49 @@
+// Grafana Alloy configuration for host metrics collection
+// Replaces Node Exporter with built-in prometheus.exporter.unix
+
+// ==================== Host Metrics ====================
+
+// Unix/Linux host metrics exporter (equivalent to Node Exporter)
+prometheus.exporter.unix "host" {
+  // Enable common collectors
+  set_collectors = [
+    "cpu",
+    "diskstats", 
+    "filesystem",
+    "loadavg",
+    "meminfo",
+    "netdev",
+    "stat",
+    "time",
+    "uname",
+    "vmstat",
+  ]
+
+  // Filesystem collector settings
+  filesystem {
+    mount_points_exclude = "^/(sys|proc|dev|host|etc)($$|/)"
+  }
+}
+
+// ==================== Scrape & Export ====================
+
+// Scrape the unix exporter
+prometheus.scrape "host_metrics" {
+  targets    = prometheus.exporter.unix.host.targets
+  forward_to = [prometheus.remote_write.prometheus.receiver]
+  
+  scrape_interval = "15s"
+  job_name        = "alloy-metrics"
+}
+
+// Remote write to Prometheus
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = "http://oib-prometheus:9090/api/v1/write"
+  }
+}
+
+// ==================== Self Monitoring ====================
+
+// Expose Alloy's own metrics for Prometheus to scrape
+// This allows health checks and monitoring of Alloy itself

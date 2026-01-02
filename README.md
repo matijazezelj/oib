@@ -42,7 +42,7 @@ make health
 **Install individual stacks:**
 ```bash
 make install-logging    # Loki + Alloy
-make install-metrics    # Prometheus + Node Exporter + cAdvisor
+make install-metrics    # Prometheus + Alloy + cAdvisor
 make install-telemetry  # Tempo + Alloy
 make install-grafana    # Unified Grafana with all datasources
 ```
@@ -86,7 +86,7 @@ This creates sample data across all three pillars so you can immediately explore
 | Stack | Components | Purpose |
 |-------|------------|--------|
 | **Logging** | Loki, Alloy | Centralized log aggregation |
-| **Metrics** | Prometheus, Pushgateway, Node Exporter, cAdvisor, Blackbox Exporter | Metrics collection (host, containers & endpoint probing) |
+| **Metrics** | Prometheus, Alloy, cAdvisor, Blackbox Exporter | Metrics collection (host, containers & endpoint probing) |
 | **Telemetry** | Tempo, Alloy | Distributed tracing |
 | **Profiling** | Pyroscope | Continuous profiling (optional) |
 | **Testing** | k6 | Load testing with Prometheus metrics output |
@@ -105,8 +105,7 @@ After installation, each stack will display integration endpoints:
 
 ### Metrics Stack
 - **Prometheus**: `http://localhost:9090` (localhost only)
-- **Pushgateway**: `http://localhost:9091` (localhost only)
-- **Node Exporter**: `http://localhost:9100` (localhost only)
+- **Alloy Metrics UI**: `http://localhost:12347` (host metrics pipeline)
 - **cAdvisor**: `http://localhost:8080` (localhost only)
 
 > **From Docker containers**: Use hostnames like `oib-prometheus:9090` on `oib-network`
@@ -130,13 +129,15 @@ After installation, each stack will display integration endpoints:
 
 ### 📊 Pre-built Dashboards
 
-OIB comes with four ready-to-use dashboards:
+OIB comes with six ready-to-use dashboards:
 
 | Dashboard | Description |
 |-----------|-------------|
-| **System Overview** | Host metrics, container CPU/memory, disk usage |
+| **System Overview** | Container CPU/memory, disk usage, network I/O |
+| **Host Metrics** | Detailed host system metrics (CPU, memory, disk, network) via Alloy |
 | **Logs Explorer** | Log volume, live logs, errors/warnings panel |
 | **Traces Explorer** | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
+| **Profiles Explorer** | CPU, memory, and goroutine profiling with Pyroscope |
 | **Request Latency** | Endpoint probing (Blackbox), k6 load test metrics, latency percentiles |
 
 ## ⚙️ Configuration
@@ -157,8 +158,7 @@ cp .env.example .env
 | `GRAFANA_PORT` | `3000` | Grafana web UI port |
 | `LOKI_PORT` | `3100` | Loki API port (localhost only) |
 | `PROMETHEUS_PORT` | `9090` | Prometheus API port (localhost only) |
-| `PUSHGATEWAY_PORT` | `9091` | Pushgateway port (localhost only) |
-| `NODE_EXPORTER_PORT` | `9100` | Node Exporter port (localhost only) |
+| `ALLOY_METRICS_PORT` | `12347` | Alloy metrics UI port (localhost only) |
 | `CADVISOR_PORT` | `8080` | cAdvisor port (localhost only) |
 | `BLACKBOX_PORT` | `9115` | Blackbox Exporter port (localhost only) |
 | `TEMPO_HTTP_PORT` | `3200` | Tempo HTTP API port (localhost only) |
@@ -180,8 +180,6 @@ By default, OIB uses pinned (stable) versions for all images. You can override t
 | `LOKI_VERSION` | `3.3.2` | Loki image tag |
 | `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
 | `PROMETHEUS_VERSION` | `v2.48.1` | Prometheus image tag |
-| `PUSHGATEWAY_VERSION` | `v1.6.2` | Pushgateway image tag |
-| `NODE_EXPORTER_VERSION` | `v1.7.0` | Node Exporter image tag |
 | `CADVISOR_VERSION` | `v0.47.2` | cAdvisor image tag |
 | `BLACKBOX_VERSION` | `v0.25.0` | Blackbox Exporter image tag |
 | `TEMPO_VERSION` | `2.6.1` | Tempo image tag |
@@ -275,6 +273,7 @@ oib/
 │   ├── compose.yaml
 │   └── config/
 │       ├── prometheus.yml
+│       ├── alloy-metrics.alloy # Host metrics via Alloy
 │       ├── blackbox.yml        # Blackbox exporter probe modules
 │       └── rules/              # Alerting rules (future)
 ├── telemetry/
@@ -292,8 +291,10 @@ oib/
 │       └── dashboards/
 │           └── json/
 │               ├── system-overview.json
+│               ├── host-metrics.json
 │               ├── logs-explorer.json
 │               ├── traces-explorer.json
+│               ├── profiles-explorer.json
 │               └── request-latency.json
 ├── testing/
 │   ├── README.md               # Load testing documentation
