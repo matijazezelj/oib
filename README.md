@@ -1,6 +1,7 @@
 # Observability in a Box (OIB)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/Website-in--a--box--tools.tech-blue)](https://in-a-box-tools.tech)
 
 A plug-and-play observability stack for developers. Zero config, production-ready patterns. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
 > **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!  

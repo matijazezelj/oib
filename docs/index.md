@@ -9,6 +9,7 @@ title: Observability in a Box
 
 Clone, run `make install`, and get instant observability for your projects using Grafana's LGTM stack (Loki, Grafana, Tempo, Prometheus).
 
+<a href="https://in-a-box-tools.tech" class="btn">Website</a>
 <a href="https://github.com/matijazezelj/oib" class="btn">View on GitHub</a>
 <a href="https://github.com/matijazezelj/oib#-quick-start" class="btn">Documentation</a>
 
