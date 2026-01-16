@@ -439,6 +439,7 @@ OIB includes security hardening for local and self-hosted deployments:
 - **Resource limits**: All containers have CPU/memory limits
 - **No-new-privileges**: Containers cannot gain additional privileges
 - **Non-root users**: Example apps run as non-root users
+- **Docker HEALTHCHECK**: All example Dockerfiles include health checks for container orchestration
 
 **Public ports** (intentionally exposed for external access):
 - `3000` - Grafana UI

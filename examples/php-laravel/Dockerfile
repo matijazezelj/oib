@@ -32,4 +32,7 @@ USER appuser
 
 EXPOSE 8000
 
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD php -r "exit(file_get_contents('http://localhost:8000/health') !== false ? 0 : 1);" || exit 1
+
 CMD ["php", "-S", "0.0.0.0:8000", "-t", "public", "public/index.php"]

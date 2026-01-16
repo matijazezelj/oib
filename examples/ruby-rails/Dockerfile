@@ -31,4 +31,7 @@ ENV RAILS_LOG_TO_STDOUT=true
 
 EXPOSE 3000
 
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ruby -e "require 'net/http'; exit(Net::HTTP.get_response(URI('http://localhost:3000/health')).is_a?(Net::HTTPSuccess) ? 0 : 1)" || exit 1
+
 CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]
