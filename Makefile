@@ -1,13 +1,15 @@
-.PHONY: help install install-grafana install-logging install-metrics install-telemetry install-profiling \
-        start start-grafana start-logging start-metrics start-telemetry start-profiling \
-        stop stop-grafana stop-logging stop-metrics stop-telemetry stop-profiling \
-        restart restart-grafana restart-logging restart-metrics restart-telemetry restart-profiling \
-        uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling \
-        status info info-grafana info-logging info-metrics info-telemetry info-profiling \
-        logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling \
+.PHONY: help install install-grafana install-logging install-metrics install-telemetry install-profiling install-services \
+        start start-grafana start-logging start-metrics start-telemetry start-profiling start-services \
+        stop stop-grafana stop-logging stop-metrics stop-telemetry stop-profiling stop-services \
+        restart restart-grafana restart-logging restart-metrics restart-telemetry restart-profiling restart-services \
+        uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
+        status info info-grafana info-logging info-metrics info-telemetry info-profiling info-services \
+        logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
         network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
-        test-load test-stress test-spike test-api
+        test-load test-stress test-spike test-api \
+        backup backup-prometheus backup-loki backup-tempo backup-grafana \
+        restore restore-prometheus restore-loki restore-tempo restore-grafana
 
 # Colors
 CYAN := \033[36m
@@ -19,6 +21,15 @@ BOLD := \033[1m
 
 # Docker compose command - include root .env file for all stacks
 DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env
+
+# Debug mode - set DEBUG=1 to enable verbose output
+DEBUG ?= 0
+ifeq ($(DEBUG),1)
+  DOCKER_COMPOSE += --verbose
+  Q :=
+else
+  Q := @
+endif
 
 # Default target
 .DEFAULT_GOAL := help
@@ -48,20 +59,29 @@ help: ## Show this help message
 	@echo "$(CYAN)Maintenance:$(RESET)"
 	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)Backup & Restore:$(RESET)"
+	@grep -E '^(backup|restore)[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)Cleanup:$(RESET)"
 	@grep -E '^uninstall[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Stack-specific commands:$(RESET)"
-	@echo "  Append $(YELLOW)-grafana$(RESET), $(YELLOW)-logging$(RESET), $(YELLOW)-metrics$(RESET), $(YELLOW)-telemetry$(RESET), or $(YELLOW)-profiling$(RESET) to commands"
+	@echo "  Append $(YELLOW)-grafana$(RESET), $(YELLOW)-logging$(RESET), $(YELLOW)-metrics$(RESET), $(YELLOW)-telemetry$(RESET), $(YELLOW)-profiling$(RESET), or $(YELLOW)-services$(RESET) to commands"
 	@echo "  Example: make install-logging, make stop-metrics, make logs-telemetry"
+	@echo ""
+	@echo "$(CYAN)Debug mode:$(RESET)"
+	@echo "  Set $(YELLOW)DEBUG=1$(RESET) for verbose output: make install DEBUG=1"
 	@echo ""
 
 # ==================== Network ====================
 
 network: ## Create shared Docker network
-	@docker info >/dev/null 2>&1 || (echo "$(RED)✗ Docker is not running. Please start Docker first.$(RESET)" && exit 1)
-	@docker network inspect oib-network >/dev/null 2>&1 || \
-		(docker network create oib-network && echo "$(GREEN)✓ Created oib-network$(RESET)")
+	@docker info >/dev/null 2>&1 || { echo "$(RED)✗ Docker is not running. Please start Docker first.$(RESET)"; exit 1; }
+	@docker network inspect oib-network >/dev/null 2>&1 || { \
+		docker network create oib-network && \
+		echo "$(GREEN)✓ Created oib-network$(RESET)" || \
+		{ echo "$(RED)✗ Failed to create oib-network$(RESET)"; exit 1; }; \
+	}
 
 # ==================== Installation ====================
 
@@ -77,9 +97,13 @@ install: network ## Install all observability stacks
 		echo "$(YELLOW)   Please change GRAFANA_ADMIN_PASSWORD before production use$(RESET)"; \
 		echo ""; \
 	fi
+	@echo "$(BOLD)[1/4]$(RESET) Installing logging stack..."
 	@$(MAKE) --no-print-directory install-logging
+	@echo "$(BOLD)[2/4]$(RESET) Installing metrics stack..."
 	@$(MAKE) --no-print-directory install-metrics
+	@echo "$(BOLD)[3/4]$(RESET) Installing telemetry stack..."
 	@$(MAKE) --no-print-directory install-telemetry
+	@echo "$(BOLD)[4/4]$(RESET) Installing Grafana..."
 	@$(MAKE) --no-print-directory install-grafana
 	@echo ""
 	@echo "$(GREEN)$(BOLD)════════════════════════════════════════════════════════════════$(RESET)"
@@ -123,6 +147,15 @@ install-profiling: network ## Install profiling stack (Pyroscope) - optional
 	@echo ""
 	@echo "$(YELLOW)Note: Restart Grafana to enable Pyroscope datasource: make restart-grafana$(RESET)"
 
+install-services: network ## Install shared services (PostgreSQL + Redis) - optional
+	@echo "$(CYAN)🗄️  Installing Shared Services...$(RESET)"
+	@cd services && $(DOCKER_COMPOSE) up -d
+	@echo "$(GREEN)✓ Shared services installed$(RESET)"
+	@echo ""
+	@echo "$(CYAN)Available services:$(RESET)"
+	@echo "  PostgreSQL: $(YELLOW)localhost:5432$(RESET) (user: oib, db: oib_demo)"
+	@echo "  Redis:      $(YELLOW)localhost:6379$(RESET)"
+
 # ==================== Start ====================
 
 start: start-logging start-metrics start-telemetry start-grafana ## Start all stacks
@@ -142,6 +175,9 @@ start-telemetry: ## Start telemetry stack
 
 start-profiling: ## Start profiling stack
 	@cd profiling && $(DOCKER_COMPOSE) start
+
+start-services: ## Start shared services (PostgreSQL + Redis)
+	@cd services && $(DOCKER_COMPOSE) start
 
 # ==================== Stop ====================
 
@@ -163,6 +199,9 @@ stop-telemetry: ## Stop telemetry stack
 stop-profiling: ## Stop profiling stack
 	@cd profiling && $(DOCKER_COMPOSE) stop
 
+stop-services: ## Stop shared services (PostgreSQL + Redis)
+	@cd services && $(DOCKER_COMPOSE) stop
+
 # ==================== Restart ====================
 
 restart: restart-logging restart-metrics restart-telemetry restart-grafana ## Restart all stacks
@@ -182,6 +221,9 @@ restart-telemetry: ## Restart telemetry stack
 
 restart-profiling: ## Restart profiling stack
 	@cd profiling && $(DOCKER_COMPOSE) restart
+
+restart-services: ## Restart shared services (PostgreSQL + Redis)
+	@cd services && $(DOCKER_COMPOSE) restart
 
 # ==================== Uninstall ====================
 
@@ -220,6 +262,11 @@ uninstall-profiling: ## Remove profiling stack and volumes
 	@echo "$(YELLOW)Removing profiling stack...$(RESET)"
 	@cd profiling && $(DOCKER_COMPOSE) down -v
 	@echo "$(GREEN)✓ Profiling stack removed$(RESET)"
+
+uninstall-services: ## Remove shared services and volumes (PostgreSQL + Redis)
+	@echo "$(YELLOW)Removing shared services...$(RESET)"
+	@cd services && $(DOCKER_COMPOSE) down -v
+	@echo "$(GREEN)✓ Shared services removed$(RESET)"
 
 # ==================== Status ====================
 
@@ -281,6 +328,18 @@ status: ## Show status of all stacks with health indicators
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Pyroscope" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Pyroscope" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-postgres; then \
+		health=$$(docker exec oib-postgres pg_isready -U oib >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "PostgreSQL" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "PostgreSQL" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-redis; then \
+		health=$$(docker exec oib-redis redis-cli ping >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Redis" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Redis" "stopped"; \
 	fi
 	@echo ""
 
@@ -379,6 +438,27 @@ info-profiling: ## Show profiling integration info
 	@echo "  • Go, Python, Java, .NET, Ruby, Node.js, Rust"
 	@echo ""
 
+info-services: ## Show shared services info (PostgreSQL + Redis)
+	@echo ""
+	@echo "$(BOLD)$(CYAN)🗄️  SHARED SERVICES (PostgreSQL + Redis)$(RESET)"
+	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
+	@echo ""
+	@echo "$(GREEN)PostgreSQL:$(RESET)"
+	@echo "  Host:     $(YELLOW)localhost:5432$(RESET) (from host)"
+	@echo "            $(YELLOW)oib-postgres:5432$(RESET) (from containers)"
+	@echo "  User:     $(CYAN)oib$(RESET)"
+	@echo "  Password: $(CYAN)See .env (POSTGRES_PASSWORD)$(RESET)"
+	@echo "  Database: $(CYAN)oib_demo$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Redis:$(RESET)"
+	@echo "  Host:     $(YELLOW)localhost:6379$(RESET) (from host)"
+	@echo "            $(YELLOW)oib-redis:6379$(RESET) (from containers)"
+	@echo ""
+	@echo "$(GREEN)Connection strings:$(RESET)"
+	@echo "  $(CYAN)postgres://oib:oib_secret@localhost:5432/oib_demo$(RESET)"
+	@echo "  $(CYAN)redis://localhost:6379$(RESET)"
+	@echo ""
+
 # ==================== Logs ====================
 
 logs: ## Tail logs from all stacks
@@ -399,6 +479,9 @@ logs-telemetry: ## Tail telemetry stack logs
 
 logs-profiling: ## Tail profiling stack logs
 	@cd profiling && $(DOCKER_COMPOSE) logs -f
+
+logs-services: ## Tail shared services logs (PostgreSQL + Redis)
+	@cd services && $(DOCKER_COMPOSE) logs -f
 
 # ==================== Health & Diagnostics ====================
 
@@ -464,19 +547,38 @@ validate: ## Validate configuration files
 	@echo ""
 	@echo "$(BOLD)🔍 Validating configuration files...$(RESET)"
 	@echo ""
-	@echo "$(CYAN)Checking YAML syntax...$(RESET)"
-	@for file in logging/config/loki-config.yml metrics/config/prometheus.yml grafana/provisioning/datasources/datasources.yml; do \
+	@ERRORS=0; \
+	echo "$(CYAN)Checking YAML syntax...$(RESET)"; \
+	for file in logging/config/loki-config.yml metrics/config/prometheus.yml grafana/provisioning/datasources/datasources.yml; do \
 		if [ -f "$$file" ]; then \
-			docker run --rm -v "$(PWD)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1 && \
-			echo "  $(GREEN)✓$(RESET) $$file" || echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
+			if docker run --rm -v "$(PWD)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1; then \
+				echo "  $(GREEN)✓$(RESET) $$file"; \
+			else \
+				echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
+				ERRORS=$$((ERRORS + 1)); \
+			fi; \
 		fi; \
-	done
-	@echo ""
-	@echo "$(CYAN)Checking Docker Compose files...$(RESET)"
-	@for dir in grafana logging metrics telemetry; do \
-		cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null && echo "  $(GREEN)✓$(RESET) $$dir/compose.yaml" || echo "  $(RED)✗$(RESET) $$dir/compose.yaml has errors"; \
-		cd ..; \
-	done
+	done; \
+	echo ""; \
+	echo "$(CYAN)Checking Docker Compose files...$(RESET)"; \
+	for dir in grafana logging metrics telemetry profiling; do \
+		if [ -f "$$dir/compose.yaml" ]; then \
+			if cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null; then \
+				echo "  $(GREEN)✓$(RESET) $$dir/compose.yaml"; \
+			else \
+				echo "  $(RED)✗$(RESET) $$dir/compose.yaml has errors"; \
+				ERRORS=$$((ERRORS + 1)); \
+			fi; \
+			cd ..; \
+		fi; \
+	done; \
+	echo ""; \
+	if [ $$ERRORS -gt 0 ]; then \
+		echo "$(RED)$(BOLD)✗ Validation failed with $$ERRORS error(s)$(RESET)"; \
+		exit 1; \
+	else \
+		echo "$(GREEN)$(BOLD)✓ All configuration files are valid$(RESET)"; \
+	fi
 	@echo ""
 
 # ==================== Maintenance ====================
@@ -814,3 +916,182 @@ test-api: network ## Run k6 API load test
 	@cd testing && $(DOCKER_COMPOSE) --profile test run --rm k6 run /scripts/api-load.js
 	@echo ""
 	@echo "$(GREEN)✓ API test complete. Check the Request Latency dashboard in Grafana.$(RESET)"
+
+# ==================== Backup & Restore ====================
+
+BACKUP_DIR := ./backups
+TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
+
+backup: ## Backup all OIB data volumes
+	@echo ""
+	@echo "$(BOLD)💾 Backing up all OIB data...$(RESET)"
+	@echo ""
+	@mkdir -p $(BACKUP_DIR)
+	@$(MAKE) --no-print-directory backup-prometheus
+	@$(MAKE) --no-print-directory backup-loki
+	@$(MAKE) --no-print-directory backup-tempo
+	@$(MAKE) --no-print-directory backup-grafana
+	@echo ""
+	@echo "$(GREEN)$(BOLD)✓ All backups complete!$(RESET)"
+	@echo ""
+	@echo "Backup location: $(YELLOW)$(BACKUP_DIR)/$(RESET)"
+	@ls -lh $(BACKUP_DIR)/*.tar.gz 2>/dev/null | tail -10
+	@echo ""
+
+backup-prometheus: ## Backup Prometheus data
+	@mkdir -p $(BACKUP_DIR)
+	@echo "$(CYAN)Backing up Prometheus...$(RESET)"
+	@if docker volume inspect oib-prometheus-data >/dev/null 2>&1; then \
+		docker run --rm \
+			-v oib-prometheus-data:/data:ro \
+			-v $(PWD)/$(BACKUP_DIR):/backup \
+			alpine tar czf /backup/prometheus_$(TIMESTAMP).tar.gz -C /data . && \
+		echo "  $(GREEN)✓$(RESET) Prometheus backup: $(BACKUP_DIR)/prometheus_$(TIMESTAMP).tar.gz"; \
+	else \
+		echo "  $(YELLOW)!$(RESET) Prometheus volume not found (skipped)"; \
+	fi
+
+backup-loki: ## Backup Loki data
+	@mkdir -p $(BACKUP_DIR)
+	@echo "$(CYAN)Backing up Loki...$(RESET)"
+	@if docker volume inspect oib-loki-data >/dev/null 2>&1; then \
+		docker run --rm \
+			-v oib-loki-data:/data:ro \
+			-v $(PWD)/$(BACKUP_DIR):/backup \
+			alpine tar czf /backup/loki_$(TIMESTAMP).tar.gz -C /data . && \
+		echo "  $(GREEN)✓$(RESET) Loki backup: $(BACKUP_DIR)/loki_$(TIMESTAMP).tar.gz"; \
+	else \
+		echo "  $(YELLOW)!$(RESET) Loki volume not found (skipped)"; \
+	fi
+
+backup-tempo: ## Backup Tempo data
+	@mkdir -p $(BACKUP_DIR)
+	@echo "$(CYAN)Backing up Tempo...$(RESET)"
+	@if docker volume inspect oib-tempo-data >/dev/null 2>&1; then \
+		docker run --rm \
+			-v oib-tempo-data:/data:ro \
+			-v $(PWD)/$(BACKUP_DIR):/backup \
+			alpine tar czf /backup/tempo_$(TIMESTAMP).tar.gz -C /data . && \
+		echo "  $(GREEN)✓$(RESET) Tempo backup: $(BACKUP_DIR)/tempo_$(TIMESTAMP).tar.gz"; \
+	else \
+		echo "  $(YELLOW)!$(RESET) Tempo volume not found (skipped)"; \
+	fi
+
+backup-grafana: ## Backup Grafana data
+	@mkdir -p $(BACKUP_DIR)
+	@echo "$(CYAN)Backing up Grafana...$(RESET)"
+	@if docker volume inspect oib-grafana-data >/dev/null 2>&1; then \
+		docker run --rm \
+			-v oib-grafana-data:/data:ro \
+			-v $(PWD)/$(BACKUP_DIR):/backup \
+			alpine tar czf /backup/grafana_$(TIMESTAMP).tar.gz -C /data . && \
+		echo "  $(GREEN)✓$(RESET) Grafana backup: $(BACKUP_DIR)/grafana_$(TIMESTAMP).tar.gz"; \
+	else \
+		echo "  $(YELLOW)!$(RESET) Grafana volume not found (skipped)"; \
+	fi
+
+restore: ## Restore all OIB data (interactive)
+	@echo ""
+	@echo "$(BOLD)📥 Restore OIB Data$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)Available backups:$(RESET)"
+	@ls -lh $(BACKUP_DIR)/*.tar.gz 2>/dev/null || echo "  No backups found in $(BACKUP_DIR)/"
+	@echo ""
+	@echo "$(CYAN)To restore a specific component, use:$(RESET)"
+	@echo "  make restore-prometheus FILE=./backups/prometheus_YYYYMMDD_HHMMSS.tar.gz"
+	@echo "  make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz"
+	@echo "  make restore-tempo FILE=./backups/tempo_YYYYMMDD_HHMMSS.tar.gz"
+	@echo "  make restore-grafana FILE=./backups/grafana_YYYYMMDD_HHMMSS.tar.gz"
+	@echo ""
+
+restore-prometheus: ## Restore Prometheus data (FILE=path/to/backup.tar.gz)
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)Error: FILE parameter required$(RESET)"; \
+		echo "Usage: make restore-prometheus FILE=./backups/prometheus_YYYYMMDD_HHMMSS.tar.gz"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FILE)" ]; then \
+		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Prometheus data!$(RESET)"
+	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@echo "$(CYAN)Stopping Prometheus...$(RESET)"
+	@cd metrics && $(DOCKER_COMPOSE) stop prometheus 2>/dev/null || true
+	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
+	@docker run --rm \
+		-v oib-prometheus-data:/data \
+		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
+	@echo "$(CYAN)Starting Prometheus...$(RESET)"
+	@cd metrics && $(DOCKER_COMPOSE) start prometheus
+	@echo "$(GREEN)✓ Prometheus restored from $(FILE)$(RESET)"
+
+restore-loki: ## Restore Loki data (FILE=path/to/backup.tar.gz)
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)Error: FILE parameter required$(RESET)"; \
+		echo "Usage: make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FILE)" ]; then \
+		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Loki data!$(RESET)"
+	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@echo "$(CYAN)Stopping Loki...$(RESET)"
+	@cd logging && $(DOCKER_COMPOSE) stop loki 2>/dev/null || true
+	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
+	@docker run --rm \
+		-v oib-loki-data:/data \
+		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
+	@echo "$(CYAN)Starting Loki...$(RESET)"
+	@cd logging && $(DOCKER_COMPOSE) start loki
+	@echo "$(GREEN)✓ Loki restored from $(FILE)$(RESET)"
+
+restore-tempo: ## Restore Tempo data (FILE=path/to/backup.tar.gz)
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)Error: FILE parameter required$(RESET)"; \
+		echo "Usage: make restore-tempo FILE=./backups/tempo_YYYYMMDD_HHMMSS.tar.gz"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FILE)" ]; then \
+		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Tempo data!$(RESET)"
+	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@echo "$(CYAN)Stopping Tempo...$(RESET)"
+	@cd telemetry && $(DOCKER_COMPOSE) stop tempo 2>/dev/null || true
+	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
+	@docker run --rm \
+		-v oib-tempo-data:/data \
+		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
+	@echo "$(CYAN)Starting Tempo...$(RESET)"
+	@cd telemetry && $(DOCKER_COMPOSE) start tempo
+	@echo "$(GREEN)✓ Tempo restored from $(FILE)$(RESET)"
+
+restore-grafana: ## Restore Grafana data (FILE=path/to/backup.tar.gz)
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)Error: FILE parameter required$(RESET)"; \
+		echo "Usage: make restore-grafana FILE=./backups/grafana_YYYYMMDD_HHMMSS.tar.gz"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FILE)" ]; then \
+		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Grafana data!$(RESET)"
+	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@echo "$(CYAN)Stopping Grafana...$(RESET)"
+	@cd grafana && $(DOCKER_COMPOSE) stop grafana 2>/dev/null || true
+	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
+	@docker run --rm \
+		-v oib-grafana-data:/data \
+		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
+	@echo "$(CYAN)Starting Grafana...$(RESET)"
+	@cd grafana && $(DOCKER_COMPOSE) start grafana
+	@echo "$(GREEN)✓ Grafana restored from $(FILE)$(RESET)"

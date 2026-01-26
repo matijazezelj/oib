@@ -21,3 +21,6 @@ data/
 # Temporary files
 tmp/
 temp/
+
+# Backups
+backups/

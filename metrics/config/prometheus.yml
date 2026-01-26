@@ -14,9 +14,9 @@ global:
 #         - targets:
 #           - alertmanager:9093
 
-# Rule files (optional)
+# Rule files
 rule_files:
-  # - /etc/prometheus/rules/*.yml
+  - /etc/prometheus/rules/*.yml
 
 scrape_configs:
   # Prometheus self-monitoring

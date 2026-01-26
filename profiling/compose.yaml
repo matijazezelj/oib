@@ -14,13 +14,10 @@ services:
       - "server"
     networks:
       - oib-network
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4040/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # Note: Pyroscope uses a distroless image with no shell/wget/curl
+    # Health is monitored externally via 'make health' and blackbox probes
     restart: unless-stopped
+    stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
     deploy:

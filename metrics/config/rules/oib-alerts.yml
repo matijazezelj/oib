@@ -1,0 +1,250 @@
+groups:
+  # ===========================================
+  # OIB Infrastructure Alerts
+  # ===========================================
+  - name: oib_infrastructure
+    rules:
+      # Service down alerts
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus has been down for more than 1 minute."
+
+      - alert: LokiDown
+        expr: probe_success{instance=~".*oib-loki.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki is down"
+          description: "Loki has been unreachable for more than 1 minute."
+
+      - alert: TempoDown
+        expr: probe_success{instance=~".*oib-tempo.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tempo is down"
+          description: "Tempo has been unreachable for more than 1 minute."
+
+      - alert: GrafanaDown
+        expr: probe_success{instance=~".*oib-grafana.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Grafana is down"
+          description: "Grafana has been unreachable for more than 1 minute."
+
+      # Scrape failures
+      - alert: PrometheusScrapeFailure
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scrape target {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for job {{ $labels.job }}."
+
+  # ===========================================
+  # Host Resource Alerts
+  # ===========================================
+  - name: host_resources
+    rules:
+      # CPU alerts
+      - alert: HostHighCpuUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% (current: {{ $value | printf \"%.1f\" }}%)."
+
+      - alert: HostCriticalCpuUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 95% (current: {{ $value | printf \"%.1f\" }}%)."
+
+      # Memory alerts
+      - alert: HostHighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 80% (current: {{ $value | printf \"%.1f\" }}%)."
+
+      - alert: HostCriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 95% (current: {{ $value | printf \"%.1f\" }}%)."
+
+      # Disk alerts
+      - alert: HostDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk {{ $labels.mountpoint }} has less than 20% free space (current: {{ $value | printf \"%.1f\" }}%)."
+
+      - alert: HostDiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk {{ $labels.mountpoint }} has less than 10% free space (current: {{ $value | printf \"%.1f\" }}%)."
+
+      # Disk I/O
+      - alert: HostHighDiskIO
+        expr: rate(node_disk_io_time_seconds_total[5m]) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk I/O on {{ $labels.instance }}"
+          description: "Disk {{ $labels.device }} is spending >90% time doing I/O."
+
+  # ===========================================
+  # Container Resource Alerts
+  # ===========================================
+  - name: container_resources
+    rules:
+      # Container CPU
+      - alert: ContainerHighCpuUsage
+        expr: (rate(container_cpu_usage_seconds_total{name!=""}[5m])) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} CPU usage is above 80%."
+
+      # Container Memory
+      - alert: ContainerHighMemoryUsage
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using {{ $value | printf \"%.1f\" }}% of its memory limit."
+
+      - alert: ContainerMemoryNearLimit
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.name }} near memory limit"
+          description: "Container {{ $labels.name }} is using {{ $value | printf \"%.1f\" }}% of its memory limit and may be OOM killed."
+
+      # Container restarts
+      - alert: ContainerRestarting
+        expr: increase(container_restart_count{name!=""}[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting frequently"
+          description: "Container {{ $labels.name }} has restarted {{ $value | printf \"%.0f\" }} times in the last 15 minutes."
+
+  # ===========================================
+  # Prometheus Self-Monitoring
+  # ===========================================
+  - name: prometheus_self
+    rules:
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus config reload failed"
+          description: "Prometheus failed to reload its configuration."
+
+      - alert: PrometheusTargetMissing
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus target missing: {{ $labels.job }}"
+          description: "A Prometheus target is missing. Job: {{ $labels.job }}, Instance: {{ $labels.instance }}."
+
+      - alert: PrometheusStorageRunningFull
+        expr: predict_linear(prometheus_tsdb_storage_blocks_bytes[6h], 24*60*60) > prometheus_tsdb_retention_limit_bytes
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus storage running full"
+          description: "Prometheus storage is predicted to fill up within 24 hours."
+
+      - alert: PrometheusHighScrapeLatency
+        expr: prometheus_target_scrape_pool_scrape_duration_seconds_sum / prometheus_target_scrape_pool_scrape_series_added > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus scrape latency high"
+          description: "Prometheus scrape latency is unusually high for job {{ $labels.scrape_job }}."
+
+  # ===========================================
+  # Blackbox Probe Alerts
+  # ===========================================
+  - name: blackbox_probes
+    rules:
+      - alert: EndpointDown
+        expr: probe_success == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Endpoint {{ $labels.instance }} is down"
+          description: "HTTP probe to {{ $labels.instance }} has been failing for 2 minutes."
+
+      - alert: EndpointSlowResponse
+        expr: probe_duration_seconds > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Endpoint {{ $labels.instance }} is slow"
+          description: "HTTP probe to {{ $labels.instance }} is taking {{ $value | printf \"%.2f\" }}s to respond."
+
+      - alert: SSLCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in less than 30 days."
+
+      - alert: SSLCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "SSL certificate expiring very soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in less than 7 days."
