@@ -2,7 +2,7 @@ name: oib-profiling
 
 services:
   pyroscope:
-    image: grafana/pyroscope:${PYROSCOPE_VERSION:-1.7.1}
+    image: grafana/pyroscope:${PYROSCOPE_VERSION:-1.18.0}
     container_name: oib-pyroscope
     env_file:
       - ../.env

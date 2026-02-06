@@ -2,7 +2,7 @@ name: oib-metrics
 
 services:
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v2.48.1}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.9.1}
     container_name: oib-prometheus
     env_file:
       - ../.env
@@ -17,10 +17,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}'
       - '--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-5GB}'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-remote-write-receiver'
-      - '--enable-feature=native-histograms'
     networks:
       - oib-network
     extra_hosts:
@@ -44,7 +41,7 @@ services:
           memory: 256M
 
   alloy-metrics:
-    image: grafana/alloy:${ALLOY_VERSION:-v1.5.1}
+    image: grafana/alloy:${ALLOY_VERSION:-v1.13.0}
     container_name: oib-alloy-metrics
     ports:
       - "127.0.0.1:${ALLOY_METRICS_PORT:-12347}:12345"
@@ -86,7 +83,7 @@ services:
           memory: 64M
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.47.2}
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.52.1}
     container_name: oib-cadvisor
     ports:
       - "127.0.0.1:${CADVISOR_PORT:-8080}:8080"
@@ -97,8 +94,6 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    devices:
-      - /dev/kmsg
     cap_add:
       - SYS_PTRACE
     security_opt:
@@ -122,7 +117,7 @@ services:
           memory: 128M
 
   blackbox-exporter:
-    image: prom/blackbox-exporter:${BLACKBOX_VERSION:-v0.25.0}
+    image: prom/blackbox-exporter:${BLACKBOX_VERSION:-v0.28.0}
     container_name: oib-blackbox-exporter
     ports:
       - "127.0.0.1:${BLACKBOX_PORT:-9115}:9115"

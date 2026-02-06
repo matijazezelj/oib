@@ -455,15 +455,17 @@ info-services: ## Show shared services info (PostgreSQL + Redis)
 	@echo "            $(YELLOW)oib-redis:6379$(RESET) (from containers)"
 	@echo ""
 	@echo "$(GREEN)Connection strings:$(RESET)"
-	@echo "  $(CYAN)postgres://oib:oib_secret@localhost:5432/oib_demo$(RESET)"
-	@echo "  $(CYAN)redis://localhost:6379$(RESET)"
+	@echo "  $(CYAN)postgres://\$${POSTGRES_USER:-oib}:\$${POSTGRES_PASSWORD}@localhost:\$${POSTGRES_PORT:-5432}/\$${POSTGRES_DB:-oib_demo}$(RESET)"
+	@echo "  $(CYAN)redis://localhost:\$${REDIS_PORT:-6379}$(RESET)"
+	@echo ""
+	@echo "  $(YELLOW)Tip: Check .env for actual credentials$(RESET)"
 	@echo ""
 
 # ==================== Logs ====================
 
 logs: ## Tail logs from all stacks
 	@echo "$(CYAN)Tailing all stack logs (Ctrl+C to stop)...$(RESET)"
-	@docker compose -f grafana/compose.yaml -f logging/compose.yaml -f metrics/compose.yaml -f telemetry/compose.yaml logs -f
+	@docker compose --env-file $(CURDIR)/.env -f grafana/compose.yaml -f logging/compose.yaml -f metrics/compose.yaml -f telemetry/compose.yaml logs -f
 
 logs-grafana: ## Tail Grafana logs
 	@cd grafana && $(DOCKER_COMPOSE) logs -f

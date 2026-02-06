@@ -2,7 +2,7 @@ name: oib-logging
 
 services:
   loki:
-    image: grafana/loki:${LOKI_VERSION:-3.3.2}
+    image: grafana/loki:${LOKI_VERSION:-3.6.5}
     container_name: oib-loki
     env_file:
       - ../.env
@@ -14,12 +14,8 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - oib-network
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # Note: Loki 3.6+ uses a distroless image (no shell/wget/curl)
+    # Readiness is monitored externally via 'make health' and blackbox probes
     restart: unless-stopped
     stop_grace_period: 30s
     security_opt:
@@ -33,7 +29,7 @@ services:
           memory: 256M
 
   alloy-logging:
-    image: grafana/alloy:${ALLOY_VERSION:-v1.5.1}
+    image: grafana/alloy:${ALLOY_VERSION:-v1.13.0}
     container_name: oib-alloy-logging
     ports:
       - "127.0.0.1:${ALLOY_LOGGING_PORT:-12345}:12345"   # Alloy UI
@@ -50,7 +46,7 @@ services:
       - oib-network
     depends_on:
       loki:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/12345 && echo -e \"GET /-/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'"]
       interval: 10s

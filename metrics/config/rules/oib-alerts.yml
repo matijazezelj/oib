@@ -181,15 +181,6 @@ groups:
           summary: "Prometheus config reload failed"
           description: "Prometheus failed to reload its configuration."
 
-      - alert: PrometheusTargetMissing
-        expr: up == 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Prometheus target missing: {{ $labels.job }}"
-          description: "A Prometheus target is missing. Job: {{ $labels.job }}, Instance: {{ $labels.instance }}."
-
       - alert: PrometheusStorageRunningFull
         expr: predict_linear(prometheus_tsdb_storage_blocks_bytes[6h], 24*60*60) > prometheus_tsdb_retention_limit_bytes
         for: 1h
