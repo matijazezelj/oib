@@ -5,7 +5,7 @@ services:
     build: .
     container_name: example-php-laravel
     ports:
-      - "3005:8000"
+      - "${DEMO_BIND_ADDR:-127.0.0.1}:3005:8000"
     environment:
       - APP_ENV=production
       - APP_DEBUG=false
@@ -24,7 +24,7 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

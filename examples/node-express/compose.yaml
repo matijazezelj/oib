@@ -5,7 +5,7 @@ services:
     build: .
     container_name: example-express-app
     ports:
-      - "3003:3000"
+      - "${DEMO_BIND_ADDR:-127.0.0.1}:3003:3000"
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=oib-alloy-telemetry:4317
       - OTEL_SERVICE_NAME=example-express-app
