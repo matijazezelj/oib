@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  compose-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare example environment
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose files
+        run: |
+          set -euo pipefail
+          for file in \
+            grafana/compose.yaml \
+            logging/compose.yaml \
+            metrics/compose.yaml \
+            telemetry/compose.yaml \
+            profiling/compose.yaml \
+            services/compose.yaml \
+            testing/compose.yaml \
+            examples/demo-app/compose.yaml \
+            examples/node-express/compose.yaml \
+            examples/python-flask/compose.yaml \
+            examples/php-laravel/compose.yaml \
+            examples/ruby-rails/compose.yaml; do
+            docker compose -f "$file" config >/dev/null
+          done
+
+      - name: Validate docs and dashboard assets
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f docs/index.md
+          test -f docs/troubleshooting.md
+          test -f grafana/provisioning/dashboards/json/system-overview.json
+          test -f grafana/provisioning/dashboards/json/traces-explorer.json
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Shell script lint (if any)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          mapfile -t scripts < <(find . -type f -name '*.sh' -not -path './.git/*')
+          if [ "${#scripts[@]}" -gt 0 ]; then
+            shellcheck --severity=warning "${scripts[@]}"
+          fi
+
+      - name: Validate JSON dashboards
+        run: |
+          set -euo pipefail
+          python3 -m json.tool grafana/provisioning/dashboards/json/system-overview.json >/dev/null
+          python3 -m json.tool grafana/provisioning/dashboards/json/traces-explorer.json >/dev/null

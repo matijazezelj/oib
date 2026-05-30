@@ -5,7 +5,7 @@ services:
     build: .
     container_name: example-ruby-rails
     ports:
-      - "3004:3000"
+      - "${DEMO_BIND_ADDR:-127.0.0.1}:3004:3000"
     environment:
       - RAILS_ENV=production
       - RAILS_LOG_TO_STDOUT=true
@@ -25,7 +25,7 @@ services:
         reservations:
           memory: 128M
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

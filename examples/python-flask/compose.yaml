@@ -5,7 +5,7 @@ services:
     build: .
     container_name: example-flask-app
     ports:
-      - "5000:5000"
+      - "${DEMO_BIND_ADDR:-127.0.0.1}:5000:5000"
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4317
       - OTEL_SERVICE_NAME=example-flask-app

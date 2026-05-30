@@ -112,8 +112,8 @@ After installation, each stack will display integration endpoints:
 > **From Docker containers**: Use hostnames like `oib-prometheus:9090` on `oib-network`
 
 ### Telemetry Stack
-- **OTLP gRPC**: `<host>:4317` ✅ Public - accepts traces from anywhere
-- **OTLP HTTP**: `http://<host>:4318` ✅ Public - accepts traces from anywhere
+- **OTLP gRPC**: `localhost:4317` by default; set `OTEL_BIND_ADDR=0.0.0.0` to accept traces from LAN clients
+- **OTLP HTTP**: `http://localhost:4318` by default; set `OTEL_BIND_ADDR=0.0.0.0` to accept traces from LAN clients
 - **Tempo API**: `http://localhost:3200` (localhost only)
 
 > **From Docker containers**: Use `oib-alloy-telemetry:4317` on `oib-network`
@@ -125,7 +125,7 @@ After installation, each stack will display integration endpoints:
 > **From Docker containers**: Use `oib-pyroscope:4040` on `oib-network`
 
 ### Grafana
-- **Grafana UI**: `http://<host>:3000` ✅ Public
+- **Grafana UI**: `http://localhost:3000` by default; set `BIND_ADDR=0.0.0.0` to expose it on the LAN
 - **Credentials**: Set in root `.env` (copy from `.env.example`)
 
 ### 📊 Pre-built Dashboards
@@ -156,6 +156,7 @@ cp .env.example .env
 |----------|---------|-------------|
 | `GRAFANA_ADMIN_USER` | `admin` | Grafana admin username |
 | `GRAFANA_ADMIN_PASSWORD` | (required) | Grafana admin password |
+| `BIND_ADDR` | `127.0.0.1` | Bind address for Grafana/browser-facing endpoints |
 | `GRAFANA_PORT` | `3000` | Grafana web UI port |
 | `LOKI_PORT` | `3100` | Loki API port (localhost only) |
 | `PROMETHEUS_PORT` | `9090` | Prometheus API port (localhost only) |
@@ -164,8 +165,9 @@ cp .env.example .env
 | `BLACKBOX_PORT` | `9115` | Blackbox Exporter port (localhost only) |
 | `TEMPO_HTTP_PORT` | `3200` | Tempo HTTP API port (localhost only) |
 | `TEMPO_GRPC_PORT` | `9095` | Tempo gRPC port (localhost only) |
-| `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver (public) |
-| `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver (public) |
+| `OTEL_BIND_ADDR` | `127.0.0.1` | Bind address for OTLP receivers; use `0.0.0.0` for LAN trace ingestion |
+| `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver |
+| `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver |
 | `PROMETHEUS_RETENTION_TIME` | `15d` | Prometheus data retention time |
 | `PROMETHEUS_RETENTION_SIZE` | `5GB` | Prometheus data retention size |
 
