@@ -1,6 +1,6 @@
 theme: jekyll-theme-cayman
 title: Observability in a Box
-description: A plug-and-play observability stack for developers. Zero config, production-ready patterns. Get instant observability using Grafana's LGTM stack.
+description: A preconfigured, self-hosted Prometheus, Loki, Tempo, Alloy, and Grafana stack for development, homelabs, and evaluation.
 show_downloads: false
 baseurl: "/oib"
 url: "https://matijazezelj.github.io"

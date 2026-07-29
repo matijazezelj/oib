@@ -57,10 +57,10 @@ Edit `config/blackbox.yml`:
 | `BLACKBOX_PORT` | `9115` | Blackbox Exporter port |
 | `PROMETHEUS_RETENTION_TIME` | `15d` | Data retention time |
 | `PROMETHEUS_RETENTION_SIZE` | `5GB` | Max storage size |
-| `PROMETHEUS_VERSION` | `v2.48.1` | Prometheus image tag |
-| `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
-| `CADVISOR_VERSION` | `v0.47.2` | cAdvisor image tag |
-| `BLACKBOX_VERSION` | `v0.25.0` | Blackbox image tag |
+| `PROMETHEUS_VERSION` | `v3.9.1` | Prometheus image tag |
+| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
+| `CADVISOR_VERSION` | `v0.52.1` | cAdvisor image tag |
+| `BLACKBOX_VERSION` | `v0.28.0` | Blackbox image tag |
 
 ## Adding Scrape Targets
 

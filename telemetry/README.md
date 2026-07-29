@@ -9,11 +9,14 @@ Distributed tracing using Grafana Tempo and Alloy.
 | **Tempo** | 3200 (localhost) | Trace storage and querying |
 | **Alloy** | 12346 (localhost) | OTLP receiver and processor |
 
-**Public Ports** (for external trace ingestion):
+**Trace ingestion ports** (localhost by default):
+
 | Protocol | Port | Description |
 |----------|------|-------------|
 | OTLP gRPC | 4317 | gRPC trace receiver |
 | OTLP HTTP | 4318 | HTTP trace receiver |
+
+Set `OTEL_BIND_ADDR=0.0.0.0` only when applications on other hosts need to send traces, and protect the endpoints with appropriate network controls.
 
 ## Features
 
@@ -54,11 +57,12 @@ Edit `config/alloy-config.alloy`:
 |----------|---------|-------------|
 | `TEMPO_HTTP_PORT` | `3200` | Tempo HTTP API port |
 | `TEMPO_GRPC_PORT` | `9095` | Tempo gRPC port |
-| `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver (public) |
-| `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver (public) |
+| `OTEL_BIND_ADDR` | `127.0.0.1` | OTLP receiver bind address |
+| `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver port |
+| `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver port |
 | `ALLOY_TELEMETRY_PORT` | `12346` | Alloy UI port |
-| `TEMPO_VERSION` | `2.6.1` | Tempo image tag |
-| `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
+| `TEMPO_VERSION` | `2.10.0` | Tempo image tag |
+| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
 
 ## Sending Traces
 

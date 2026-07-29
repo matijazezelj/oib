@@ -6,13 +6,13 @@ Unified visualization dashboard for logs, metrics, and traces.
 
 | Service | Port | Description |
 |---------|------|-------------|
-| **Grafana** | 3000 (public) | Web UI for visualization |
+| **Grafana** | 3000 (localhost by default) | Web UI for visualization |
 
 ## Features
 
 - **Unified observability**: Single pane for logs, metrics, and traces
 - **Pre-configured datasources**: Loki, Prometheus, and Tempo auto-provisioned
-- **Built-in dashboards**: System Overview, Logs Explorer, Traces Explorer, Request Latency
+- **Built-in dashboards**: Seven dashboards for metrics, logs, traces, profiling, probing, and stack health
 - **Explore mode**: Ad-hoc querying with LogQL, PromQL, and TraceQL
 
 ## Quick Start
@@ -48,16 +48,19 @@ GRAFANA_ADMIN_PASSWORD=your-secure-password
 | `GRAFANA_ADMIN_USER` | `admin` | Admin username |
 | `GRAFANA_ADMIN_PASSWORD` | (required) | Admin password |
 | `GRAFANA_PORT` | `3000` | Web UI port |
-| `GRAFANA_VERSION` | `11.3.1` | Grafana image tag |
+| `GRAFANA_VERSION` | `12.3.2` | Grafana image tag |
 
 ## Pre-built Dashboards
 
 | Dashboard | Description |
 |-----------|-------------|
 | **System Overview** | Host metrics, container CPU/memory, disk usage |
+| **Host Metrics** | Detailed host CPU, memory, disk, and network metrics |
 | **Logs Explorer** | Log volume, live logs, errors/warnings panel |
 | **Traces Explorer** | TraceQL examples, language-specific code samples |
+| **Profiles Explorer** | Continuous profiling views and integration guidance |
 | **Request Latency** | Endpoint probing, k6 load test metrics |
+| **Stack Health** | OIB component health and Prometheus ingestion status |
 
 ## Adding Custom Dashboards
 

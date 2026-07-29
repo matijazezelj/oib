@@ -1,6 +1,6 @@
 # Production Hardening Guide
 
-This guide covers security and reliability improvements for running OIB in production environments.
+This guide covers security and reliability work required before adapting OIB to a production environment. The default Docker Compose topology is single-host, unauthenticated between components, and not highly available; this guide is not a production-readiness guarantee.
 
 ## Security Checklist
 
@@ -100,9 +100,7 @@ LOKI_PORT=3100          # Bound to 127.0.0.1 in compose
 TEMPO_HTTP_PORT=3200    # Bound to 127.0.0.1 in compose
 ```
 
-Only these are exposed publicly by default:
-- Grafana (port 3000) - For web access
-- OTLP endpoints (ports 4317, 4318) - For trace ingestion
+No OIB ports are publicly exposed by default. Grafana and OTLP bind to `127.0.0.1` unless you explicitly set `BIND_ADDR=0.0.0.0` or `OTEL_BIND_ADDR=0.0.0.0`. If you expose either service, add firewall restrictions, authentication where supported, and TLS before accepting untrusted traffic.
 
 ### Firewall Rules
 
@@ -215,26 +213,11 @@ compactor:
 
 ## High Availability
 
-For production HA, consider:
+OIB does not provide a high-availability deployment. Do not point multiple Prometheus processes at the same TSDB volume. For an HA architecture, use upstream-supported deployment patterns and externalize state before adding replicas.
 
 ### Prometheus HA
 
-Run multiple Prometheus instances with shared storage:
-
-```yaml
-services:
-  prometheus-1:
-    # ... existing config
-    command:
-      - '--storage.tsdb.path=/prometheus'
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--web.enable-lifecycle'
-
-  prometheus-2:
-    # Duplicate of prometheus-1
-```
-
-Use Thanos or Cortex for long-term storage and deduplication.
+Run independent Prometheus replicas and use a system designed for deduplication and long-term storage, such as Thanos or Grafana Mimir. Each Prometheus replica must have its own local storage.
 
 ### Loki HA
 
@@ -364,6 +347,14 @@ For production alerting:
 ---
 
 ## Log Management
+
+### Docker Log Collection Scope
+
+The default Alloy configuration discovers every running Docker container through `/var/run/docker.sock`. This includes containers outside the OIB project. Before using it on a shared host:
+
+- Review logs for credentials, tokens, personal data, and other sensitive values.
+- Add discovery relabel rules if only selected containers should be collected.
+- Treat Docker socket access as privileged host integration, even when the socket is mounted read-only.
 
 ### Log Rotation
 

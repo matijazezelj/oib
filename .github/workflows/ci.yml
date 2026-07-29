@@ -41,10 +41,12 @@ jobs:
         run: |
           set -euo pipefail
           test -f README.md
+          test -f NOTICE.md
           test -f docs/index.md
           test -f docs/troubleshooting.md
           test -f grafana/provisioning/dashboards/json/system-overview.json
           test -f grafana/provisioning/dashboards/json/traces-explorer.json
+          ! grep -R $'\uFFFD' README.md docs
 
   lint:
     runs-on: ubuntu-latest
@@ -65,5 +67,16 @@ jobs:
       - name: Validate JSON dashboards
         run: |
           set -euo pipefail
-          python3 -m json.tool grafana/provisioning/dashboards/json/system-overview.json >/dev/null
-          python3 -m json.tool grafana/provisioning/dashboards/json/traces-explorer.json >/dev/null
+          find grafana logging metrics telemetry \
+            -path '*/provisioning/dashboards/json/*.json' \
+            -type f -print0 |
+            while IFS= read -r -d '' file; do
+              python3 -m json.tool "$file" >/dev/null
+            done
+
+      - name: Validate Makefile entry points
+        run: |
+          set -euo pipefail
+          make help >/dev/null
+          make -n health >/dev/null
+          make -n demo >/dev/null

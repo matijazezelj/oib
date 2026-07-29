@@ -5,9 +5,9 @@ title: Observability in a Box
 
 # 🔭 Observability in a Box
 
-**A plug-and-play observability stack for developers. Zero config, production-ready patterns.**
+**A preconfigured, self-hosted observability stack for local development, homelabs, and small teams.**
 
-Clone, run `make install`, and get instant observability for your projects using Grafana's LGTM stack (Loki, Grafana, Tempo, Prometheus).
+Run Prometheus, Loki, Tempo, Alloy, Grafana, and optional Pyroscope in Docker with ready-made dashboards and instrumented examples.
 
 <a href="https://in-a-box-tools.tech" class="btn">Website</a>
 <a href="https://github.com/matijazezelj/oib" class="btn">View on GitHub</a>
@@ -28,7 +28,7 @@ make demo
 make open
 ```
 
-That's it. Open [http://localhost:3000](http://localhost:3000) and start exploring your data.
+Open [http://localhost:3000](http://localhost:3000), or your configured `GRAFANA_PORT`, and start on the OIB Stack Health dashboard.
 
 ---
 
@@ -60,7 +60,7 @@ Once installed, your applications can send data to:
 
 ## 📊 Pre-built Dashboards
 
-OIB comes with six ready-to-use Grafana dashboards:
+OIB comes with seven ready-to-use Grafana dashboards:
 
 - **System Overview** — Container CPU/memory, disk usage, network I/O
 - **Host Metrics** — Detailed host system metrics (CPU, memory, disk, network) via Alloy
@@ -68,10 +68,11 @@ OIB comes with six ready-to-use Grafana dashboards:
 - **Traces Explorer** — TraceQL examples with code samples for Python, Node.js, Ruby, and PHP
 - **Profiles Explorer** — CPU, memory, and goroutine profiling with Pyroscope
 - **Request Latency** — Endpoint probing results and k6 load test metrics
+- **Stack Health** — Health and ingestion status for the OIB components
 
 ---
 
-## � How It Looks
+## 🖼️ How It Looks
 
 ### Dashboard Overview
 All OIB dashboards organized in one folder, with tags for easy filtering.
@@ -114,7 +115,7 @@ Continuous profiling with flame graphs to find performance bottlenecks.
 
 I've spent 25 years in infrastructure. Started as a sysadmin, moved through DevOps, now I'm in SecOps. Along the way I've worked on systems handling petabytes of data and hundreds of thousands of requests per second.
 
-And in all that time, one thing hasn't changed: **most developers have no idea how their application actually behaves in production.**
+And in all that time, one thing hasn't changed: **many teams still lack a clear view of how their applications behave after deployment.**
 
 I don't mean that as criticism. It's not their job to know the internals of Prometheus or wrestle with Loki configurations. They're busy writing features, fixing bugs, shipping code. But the gap between "it works on my machine" and "it works at scale" is where careers get made or broken — and where outages happen at 3 AM.
 
@@ -127,7 +128,7 @@ A dev writes an app. It works locally. It passes CI. It gets deployed. Then, wee
 - "What was happening when that error occurred?"
 - "How much memory does this thing actually need?"
 
-Nobody knows. There's no observability. Maybe there's some basic logging that writes to stdout and disappears into the void. Maybe someone set up metrics once but the Grafana dashboard is broken and nobody remembers the password.
+The answers are hard to find without observability. Maybe there's basic logging that writes to stdout and disappears into the void. Maybe someone set up metrics once but the dashboard is broken and nobody remembers the password.
 
 So everyone's flying blind, and when something breaks, the debugging process is pure archaeology.
 
@@ -148,9 +149,9 @@ I get it. I've set this up dozens of times and it still takes me a few hours to 
 
 ### So I Built OIB
 
-It's a single repo that gives you the complete Grafana LGTM stack configured and ready to go. Clone it, run `make install`, and you have production-grade observability.
+It's a single repo that gives you a Grafana-based Prometheus, Loki, and Tempo stack configured and ready to explore. Clone it, set a password, and run `make install`.
 
-The whole thing runs in Docker. It's designed for local development and self-hosted environments, but the patterns scale — this is the same stack running in production at companies you've heard of.
+The whole thing runs in Docker. The default configuration is designed for local development, homelabs, learning, and single-host evaluation. The individual components can be deployed in production architectures, but OIB's default Compose topology is not a high-availability production platform.
 
 ---
 
@@ -248,9 +249,9 @@ networks:
 
 ---
 
-## � Running at Scale
+## 📈 Instrumenting Multiple Application Instances
 
-OIB handles multiple application instances seamlessly. Here's how to run a scaled deployment:
+Multiple application instances can send telemetry to one OIB host for development and evaluation. This does not make the OIB backend highly available; see the [production hardening guide](production-hardening.md) before using the pattern outside a controlled environment.
 
 ### Docker Compose with Multiple Instances
 
@@ -353,7 +354,7 @@ histogram_quantile(0.95,
 
 ---
 
-## �💡 The Real Point
+## 💡 The Real Point
 
 Observability shouldn't be a barrier. You shouldn't need to read 50 pages of documentation just to see how much memory your app is using.
 
@@ -368,7 +369,10 @@ I built OIB because I was tired of watching smart people debug production issues
 - **GitHub Repository**: [github.com/matijazezelj/oib](https://github.com/matijazezelj/oib)
 - **Full Documentation**: [README](https://github.com/matijazezelj/oib#readme)
 - **Examples**: [Python, Node.js, Ruby, PHP](https://github.com/matijazezelj/oib/tree/main/examples)
+- **Licensing and Attributions**: [NOTICE](https://github.com/matijazezelj/oib/blob/main/NOTICE.md)
 
 ---
+
+The Grafana Labs Marks are trademarks of Grafana Labs, and are used with Grafana Labs’ permission. We are not affiliated with, endorsed or sponsored by Grafana Labs or its affiliates.
 
 *Questions or feedback? Find me on Reddit: [u/matijaz](https://reddit.com/u/matijaz). If you build something cool with OIB, I'd love to hear about it.*

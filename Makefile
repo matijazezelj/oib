@@ -1,4 +1,4 @@
-.PHONY: help install install-grafana install-logging install-metrics install-telemetry install-profiling install-services \
+.PHONY: help preflight install install-grafana install-logging install-metrics install-telemetry install-profiling install-services \
         start start-grafana start-logging start-metrics start-telemetry start-profiling start-services \
         stop stop-grafana stop-logging stop-metrics stop-telemetry stop-profiling stop-services \
         restart restart-grafana restart-logging restart-metrics restart-telemetry restart-profiling restart-services \
@@ -21,6 +21,45 @@ BOLD := \033[1m
 
 # Docker compose command - include root .env file for all stacks
 DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env
+
+# Read only the simple endpoint values needed by Make. Docker Compose remains
+# responsible for parsing the complete .env file.
+env_value = $(strip $(shell awk -F= '$$1 == "$(1)" { print substr($$0, index($$0, "=") + 1); exit }' "$(CURDIR)/.env" 2>/dev/null))
+
+BIND_ADDR := $(or $(call env_value,BIND_ADDR),127.0.0.1)
+GRAFANA_PORT := $(or $(call env_value,GRAFANA_PORT),3000)
+LOKI_PORT := $(or $(call env_value,LOKI_PORT),3100)
+ALLOY_LOGGING_PORT := $(or $(call env_value,ALLOY_LOGGING_PORT),12345)
+PROMETHEUS_PORT := $(or $(call env_value,PROMETHEUS_PORT),9090)
+ALLOY_METRICS_PORT := $(or $(call env_value,ALLOY_METRICS_PORT),12347)
+CADVISOR_PORT := $(or $(call env_value,CADVISOR_PORT),8080)
+BLACKBOX_PORT := $(or $(call env_value,BLACKBOX_PORT),9115)
+TEMPO_HTTP_PORT := $(or $(call env_value,TEMPO_HTTP_PORT),3200)
+TEMPO_GRPC_PORT := $(or $(call env_value,TEMPO_GRPC_PORT),9095)
+OTEL_BIND_ADDR := $(or $(call env_value,OTEL_BIND_ADDR),127.0.0.1)
+OTEL_GRPC_PORT := $(or $(call env_value,OTEL_GRPC_PORT),4317)
+OTEL_HTTP_PORT := $(or $(call env_value,OTEL_HTTP_PORT),4318)
+ALLOY_TELEMETRY_PORT := $(or $(call env_value,ALLOY_TELEMETRY_PORT),12346)
+PYROSCOPE_PORT := $(or $(call env_value,PYROSCOPE_PORT),4040)
+
+GRAFANA_CONNECT_HOST := $(if $(filter 0.0.0.0,$(BIND_ADDR)),127.0.0.1,$(BIND_ADDR))
+OTEL_CONNECT_HOST := $(if $(filter 0.0.0.0,$(OTEL_BIND_ADDR)),127.0.0.1,$(OTEL_BIND_ADDR))
+GRAFANA_URL := http://$(GRAFANA_CONNECT_HOST):$(GRAFANA_PORT)
+LOKI_URL := http://127.0.0.1:$(LOKI_PORT)
+ALLOY_LOGGING_URL := http://127.0.0.1:$(ALLOY_LOGGING_PORT)
+PROMETHEUS_URL := http://127.0.0.1:$(PROMETHEUS_PORT)
+ALLOY_METRICS_URL := http://127.0.0.1:$(ALLOY_METRICS_PORT)
+CADVISOR_URL := http://127.0.0.1:$(CADVISOR_PORT)
+BLACKBOX_URL := http://127.0.0.1:$(BLACKBOX_PORT)
+TEMPO_URL := http://127.0.0.1:$(TEMPO_HTTP_PORT)
+ALLOY_TELEMETRY_URL := http://127.0.0.1:$(ALLOY_TELEMETRY_PORT)
+OTEL_HTTP_URL := http://$(OTEL_CONNECT_HOST):$(OTEL_HTTP_PORT)
+PYROSCOPE_URL := http://127.0.0.1:$(PYROSCOPE_PORT)
+
+CORE_PORTS := $(GRAFANA_PORT) $(LOKI_PORT) $(ALLOY_LOGGING_PORT) $(PROMETHEUS_PORT) \
+              $(ALLOY_METRICS_PORT) $(CADVISOR_PORT) $(BLACKBOX_PORT) \
+              $(TEMPO_HTTP_PORT) $(TEMPO_GRPC_PORT) $(OTEL_GRPC_PORT) \
+              $(OTEL_HTTP_PORT) $(ALLOY_TELEMETRY_PORT)
 
 # Debug mode - set DEBUG=1 to enable verbose output
 DEBUG ?= 0
@@ -75,6 +114,32 @@ help: ## Show this help message
 
 # ==================== Network ====================
 
+preflight: ## Check prerequisites and port conflicts before first install
+	@docker info >/dev/null 2>&1 || { echo "$(RED)✗ Docker is not running. Please start Docker first.$(RESET)"; exit 1; }
+	@docker compose version >/dev/null 2>&1 || { echo "$(RED)✗ Docker Compose v2+ is required.$(RESET)"; exit 1; }
+	@duplicates=$$(printf '%s\n' $(CORE_PORTS) | sort | uniq -d | tr '\n' ' '); \
+	if [ -n "$$duplicates" ]; then \
+		echo "$(RED)✗ The same host port is configured more than once: $$duplicates$(RESET)"; \
+		echo "$(YELLOW)  Give each endpoint a unique port in .env.$(RESET)"; \
+		exit 1; \
+	fi
+	@if command -v lsof >/dev/null 2>&1; then \
+		conflicts=""; \
+		for port in $(CORE_PORTS); do \
+			if lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1 && \
+			   ! docker ps --filter "publish=$$port" --format '{{.Names}}' | grep -q '^oib-'; then \
+				conflicts="$$conflicts $$port"; \
+			fi; \
+		done; \
+		if [ -n "$$conflicts" ]; then \
+			echo "$(RED)✗ Required port(s) already in use:$$conflicts$(RESET)"; \
+			echo "$(YELLOW)  Change the corresponding values in .env, then run make install again.$(RESET)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "$(YELLOW)! lsof is unavailable; skipping host port preflight.$(RESET)"; \
+	fi
+
 network: ## Create shared Docker network
 	@docker info >/dev/null 2>&1 || { echo "$(RED)✗ Docker is not running. Please start Docker first.$(RESET)"; exit 1; }
 	@docker network inspect oib-network >/dev/null 2>&1 || { \
@@ -85,18 +150,21 @@ network: ## Create shared Docker network
 
 # ==================== Installation ====================
 
-install: network ## Install all observability stacks
+install: ## Install all observability stacks
 	@if [ ! -f .env ]; then \
 		echo "$(YELLOW)! No .env file found. Creating from .env.example...$(RESET)"; \
 		cp .env.example .env; \
 		echo "$(YELLOW)! Please edit .env and set a secure GRAFANA_ADMIN_PASSWORD$(RESET)"; \
 		echo ""; \
+		exit 1; \
 	fi
 	@if grep -q "CHANGE_ME" .env 2>/dev/null; then \
-		echo "$(YELLOW)$(BOLD)⚠️  WARNING: Default password detected in .env$(RESET)"; \
-		echo "$(YELLOW)   Please change GRAFANA_ADMIN_PASSWORD before production use$(RESET)"; \
+		echo "$(RED)$(BOLD)✗ Placeholder password detected in .env$(RESET)"; \
+		echo "$(YELLOW)  Set GRAFANA_ADMIN_PASSWORD before starting OIB.$(RESET)"; \
 		echo ""; \
+		exit 1; \
 	fi
+	@$(MAKE) --no-print-directory preflight
 	@echo "$(BOLD)[1/4]$(RESET) Installing logging stack..."
 	@$(MAKE) --no-print-directory install-logging
 	@echo "$(BOLD)[2/4]$(RESET) Installing metrics stack..."
@@ -110,8 +178,8 @@ install: network ## Install all observability stacks
 	@echo "$(GREEN)$(BOLD)              ✓ OIB installed successfully!$(RESET)"
 	@echo "$(GREEN)$(BOLD)════════════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@echo "  $(BOLD)Open Grafana:$(RESET)       $(YELLOW)http://localhost:3000$(RESET)"
-	@echo "  $(BOLD)Send traces to:$(RESET)     $(YELLOW)localhost:4317$(RESET) (gRPC) or $(YELLOW)localhost:4318$(RESET) (HTTP)"
+	@echo "  $(BOLD)Open Grafana:$(RESET)       $(YELLOW)$(GRAFANA_URL)$(RESET)"
+	@echo "  $(BOLD)Send traces to:$(RESET)     $(YELLOW)$(OTEL_CONNECT_HOST):$(OTEL_GRPC_PORT)$(RESET) (gRPC) or $(YELLOW)$(OTEL_HTTP_URL)$(RESET) (HTTP)"
 	@echo ""
 	@echo "$(CYAN)Next steps:$(RESET)"
 	@echo "  $(GREEN)make demo$(RESET)      Generate sample data to explore"
@@ -276,66 +344,73 @@ status: ## Show status of all stacks with health indicators
 	@echo ""
 	@printf "  %-20s %-12s %s\n" "SERVICE" "STATUS" "HEALTH"
 	@echo "  ────────────────────────────────────────────────"
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-grafana; then \
-		health=$$(curl -sf http://localhost:3000/api/health 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-grafana; then \
+		health=$$(curl -sf $(GRAFANA_URL)/api/health >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Grafana" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Grafana" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-loki; then \
-		health=$$(curl -sf http://localhost:3100/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-loki; then \
+		health=$$(curl -sf $(LOKI_URL)/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Loki" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Loki" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-alloy-logging; then \
-		health=$$(curl -sf http://localhost:12345/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-alloy-logging; then \
+		health=$$(curl -sf $(ALLOY_LOGGING_URL)/-/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (logging)" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (logging)" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-prometheus; then \
-		health=$$(curl -sf http://localhost:9090/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-prometheus; then \
+		health=$$(curl -sf $(PROMETHEUS_URL)/-/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Prometheus" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Prometheus" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-alloy-metrics; then \
-		health=$$(curl -sf http://localhost:12347/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-alloy-metrics; then \
+		health=$$(curl -sf $(ALLOY_METRICS_URL)/-/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (metrics)" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (metrics)" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-cadvisor; then \
-		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "cAdvisor" "running" "$(GREEN)✓ healthy$(RESET)"; \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-cadvisor; then \
+		health=$$(curl -sf $(CADVISOR_URL)/healthz >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "cAdvisor" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "cAdvisor" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-tempo; then \
-		health=$$(curl -sf http://localhost:3200/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-blackbox-exporter; then \
+		health=$$(curl -sf $(BLACKBOX_URL)/health >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Blackbox Exporter" "running" "$$health"; \
+	else \
+		printf "  %-20s $(RED)%-12s$(RESET)\n" "Blackbox Exporter" "stopped"; \
+	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-tempo; then \
+		health=$$(curl -sf $(TEMPO_URL)/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Tempo" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Tempo" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-alloy-telemetry; then \
-		health=$$(curl -sf http://localhost:12346/-/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-alloy-telemetry; then \
+		health=$$(curl -sf $(ALLOY_TELEMETRY_URL)/-/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (telemetry)" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (telemetry)" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-pyroscope; then \
-		health=$$(curl -sf http://localhost:4040/ready 2>/dev/null && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-pyroscope; then \
+		health=$$(curl -sf $(PYROSCOPE_URL)/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Pyroscope" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Pyroscope" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-postgres; then \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-postgres; then \
 		health=$$(docker exec oib-postgres pg_isready -U oib >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "PostgreSQL" "running" "$$health"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "PostgreSQL" "stopped"; \
 	fi
-	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q oib-redis; then \
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-redis; then \
 		health=$$(docker exec oib-redis redis-cli ping >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Redis" "running" "$$health"; \
 	else \
@@ -361,7 +436,7 @@ info-grafana: ## Show Grafana info
 	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Dashboard:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:3000$(RESET)"
+	@echo "  URL:      $(YELLOW)$(GRAFANA_URL)$(RESET)"
 	@echo "  Login:    $(CYAN)See .env file for credentials$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Datasources:$(RESET)"
@@ -376,14 +451,14 @@ info-logging: ## Show logging integration info
 	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Alloy UI:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:12345$(RESET)"
+	@echo "  URL:      $(YELLOW)$(ALLOY_LOGGING_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Loki Push API:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:3100/loki/api/v1/push$(RESET)"
+	@echo "  URL:      $(YELLOW)$(LOKI_URL)/loki/api/v1/push$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Automatic Docker log collection:$(RESET)"
 	@echo "  Alloy automatically collects logs from all Docker containers."
-	@echo "  No configuration needed - just run your containers!"
+	@echo "  Review logging/config/alloy-config.alloy to limit collection on shared hosts."
 	@echo ""
 
 info-metrics: ## Show metrics integration info
@@ -392,10 +467,10 @@ info-metrics: ## Show metrics integration info
 	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Prometheus UI:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:9090$(RESET)"
+	@echo "  URL:      $(YELLOW)$(PROMETHEUS_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Alloy Metrics UI:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:12347$(RESET)"
+	@echo "  URL:      $(YELLOW)$(ALLOY_METRICS_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Add scrape target:$(RESET)"
 	@echo "  Edit $(CYAN)metrics/config/prometheus.yml$(RESET) and add:"
@@ -410,11 +485,11 @@ info-telemetry: ## Show telemetry integration info
 	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Alloy UI:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:12346$(RESET)"
+	@echo "  URL:      $(YELLOW)$(ALLOY_TELEMETRY_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)OpenTelemetry Endpoints:$(RESET)"
-	@echo "  OTLP gRPC:  $(YELLOW)localhost:4317$(RESET)"
-	@echo "  OTLP HTTP:  $(YELLOW)http://localhost:4318$(RESET)"
+	@echo "  OTLP gRPC:  $(YELLOW)$(OTEL_CONNECT_HOST):$(OTEL_GRPC_PORT)$(RESET)"
+	@echo "  OTLP HTTP:  $(YELLOW)$(OTEL_HTTP_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Configure your app:$(RESET)"
 	@echo "  $(CYAN)OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318$(RESET)"
@@ -426,7 +501,7 @@ info-profiling: ## Show profiling integration info
 	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Pyroscope UI:$(RESET)"
-	@echo "  URL:      $(YELLOW)http://localhost:4040$(RESET)"
+	@echo "  URL:      $(YELLOW)$(PYROSCOPE_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)SDK Integration:$(RESET)"
 	@echo "  Server:   $(YELLOW)http://<oib-host>:4040$(RESET)"
@@ -491,23 +566,48 @@ health: ## Quick health check of all services
 	@echo ""
 	@echo "$(BOLD)🏥 Health Check$(RESET)"
 	@echo ""
-	@echo "$(CYAN)Grafana:$(RESET)"
-	@curl -sf http://localhost:3000/api/health >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Grafana is healthy" || echo "  $(RED)✗$(RESET) Grafana is not responding"
-	@echo ""
-	@echo "$(CYAN)Logging:$(RESET)"
-	@curl -sf http://localhost:3100/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Loki is healthy" || echo "  $(RED)✗$(RESET) Loki is not responding"
-	@curl -sf http://localhost:12345/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (logging) is healthy" || echo "  $(RED)✗$(RESET) Alloy (logging) is not responding"
-	@echo ""
-	@echo "$(CYAN)Metrics:$(RESET)"
-	@curl -sf http://localhost:9090/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Prometheus is healthy" || echo "  $(RED)✗$(RESET) Prometheus is not responding"
-	@curl -sf http://localhost:12347/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (metrics) is healthy" || echo "  $(RED)✗$(RESET) Alloy (metrics) is not responding"
-	@echo ""
-	@echo "$(CYAN)Telemetry:$(RESET)"
-	@curl -sf http://localhost:3200/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Tempo is healthy" || echo "  $(RED)✗$(RESET) Tempo is not responding"
-	@curl -sf http://localhost:12346/-/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Alloy (telemetry) is healthy" || echo "  $(RED)✗$(RESET) Alloy (telemetry) is not responding"
-	@echo ""
-	@echo "$(CYAN)Profiling:$(RESET)"
-	@curl -sf http://localhost:4040/ready >/dev/null 2>&1 && echo "  $(GREEN)✓$(RESET) Pyroscope is healthy" || echo "  $(RED)✗$(RESET) Pyroscope is not responding (run 'make install-profiling' to enable)"
+	@errors=0; \
+	check_http() { \
+		label="$$1"; container="$$2"; url="$$3"; \
+		if [ "$$(docker inspect --format '{{.State.Running}}' "$$container" 2>/dev/null)" != "true" ]; then \
+			echo "  $(RED)✗$(RESET) $$label is not running"; \
+			errors=$$((errors + 1)); \
+		elif curl -sf "$$url" >/dev/null 2>&1; then \
+			echo "  $(GREEN)✓$(RESET) $$label is healthy"; \
+		else \
+			echo "  $(RED)✗$(RESET) $$label is not responding at $$url"; \
+			errors=$$((errors + 1)); \
+		fi; \
+	}; \
+	echo "$(CYAN)Grafana:$(RESET)"; \
+	check_http "Grafana" "oib-grafana" "$(GRAFANA_URL)/api/health"; \
+	echo ""; \
+	echo "$(CYAN)Logging:$(RESET)"; \
+	check_http "Loki" "oib-loki" "$(LOKI_URL)/ready"; \
+	check_http "Alloy (logging)" "oib-alloy-logging" "$(ALLOY_LOGGING_URL)/-/ready"; \
+	echo ""; \
+	echo "$(CYAN)Metrics:$(RESET)"; \
+	check_http "Prometheus" "oib-prometheus" "$(PROMETHEUS_URL)/-/ready"; \
+	check_http "Alloy (metrics)" "oib-alloy-metrics" "$(ALLOY_METRICS_URL)/-/ready"; \
+	check_http "cAdvisor" "oib-cadvisor" "$(CADVISOR_URL)/healthz"; \
+	check_http "Blackbox Exporter" "oib-blackbox-exporter" "$(BLACKBOX_URL)/health"; \
+	echo ""; \
+	echo "$(CYAN)Telemetry:$(RESET)"; \
+	check_http "Tempo" "oib-tempo" "$(TEMPO_URL)/ready"; \
+	check_http "Alloy (telemetry)" "oib-alloy-telemetry" "$(ALLOY_TELEMETRY_URL)/-/ready"; \
+	echo ""; \
+	echo "$(CYAN)Profiling (optional):$(RESET)"; \
+	if docker inspect oib-pyroscope >/dev/null 2>&1; then \
+		check_http "Pyroscope" "oib-pyroscope" "$(PYROSCOPE_URL)/ready"; \
+	else \
+		echo "  $(YELLOW)-$(RESET) Pyroscope is not installed"; \
+	fi; \
+	echo ""; \
+	if [ $$errors -gt 0 ]; then \
+		echo "$(RED)$(BOLD)✗ Health check failed with $$errors unhealthy core service(s)$(RESET)"; \
+		exit 1; \
+	fi; \
+	echo "$(GREEN)$(BOLD)✓ All installed core services are healthy$(RESET)"
 	@echo ""
 
 doctor: ## Diagnose common issues (Docker, ports, config)
@@ -532,8 +632,12 @@ doctor: ## Diagnose common issues (Docker, ports, config)
 	@echo ""
 
 check-ports: ## Check if required ports are available
-	@for port in 3000 3100 9090 9091 4317 4318; do \
-		if lsof -i :$$port >/dev/null 2>&1; then \
+	@if ! command -v lsof >/dev/null 2>&1; then \
+		echo "  $(YELLOW)!$(RESET) lsof is unavailable; port checks were skipped"; \
+		exit 0; \
+	fi; \
+	for port in $(CORE_PORTS); do \
+		if lsof -nP -iTCP:$$port -sTCP:LISTEN >/dev/null 2>&1; then \
 			echo "  $(YELLOW)!$(RESET) Port $$port is in use"; \
 		else \
 			echo "  $(GREEN)✓$(RESET) Port $$port is available"; \
@@ -551,7 +655,14 @@ validate: ## Validate configuration files
 	@echo ""
 	@ERRORS=0; \
 	echo "$(CYAN)Checking YAML syntax...$(RESET)"; \
-	for file in logging/config/loki-config.yml metrics/config/prometheus.yml grafana/provisioning/datasources/datasources.yml; do \
+	for file in \
+		logging/config/loki-config.yml \
+		metrics/config/prometheus.yml \
+		metrics/config/blackbox.yml \
+		metrics/config/rules/oib-alerts.yml \
+		telemetry/config/tempo.yaml \
+		grafana/provisioning/datasources/datasources.yml \
+		grafana/provisioning/dashboards/dashboards.yml; do \
 		if [ -f "$$file" ]; then \
 			if docker run --rm -v "$(PWD)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1; then \
 				echo "  $(GREEN)✓$(RESET) $$file"; \
@@ -563,15 +674,34 @@ validate: ## Validate configuration files
 	done; \
 	echo ""; \
 	echo "$(CYAN)Checking Docker Compose files...$(RESET)"; \
-	for dir in grafana logging metrics telemetry profiling; do \
-		if [ -f "$$dir/compose.yaml" ]; then \
-			if cd $$dir && $(DOCKER_COMPOSE) config --quiet 2>/dev/null; then \
-				echo "  $(GREEN)✓$(RESET) $$dir/compose.yaml"; \
-			else \
-				echo "  $(RED)✗$(RESET) $$dir/compose.yaml has errors"; \
-				ERRORS=$$((ERRORS + 1)); \
-			fi; \
-			cd ..; \
+	for file in \
+		grafana/compose.yaml \
+		logging/compose.yaml \
+		metrics/compose.yaml \
+		telemetry/compose.yaml \
+		profiling/compose.yaml \
+		services/compose.yaml \
+		testing/compose.yaml \
+		examples/demo-app/compose.yaml \
+		examples/node-express/compose.yaml \
+		examples/python-flask/compose.yaml \
+		examples/php-laravel/compose.yaml \
+		examples/ruby-rails/compose.yaml; do \
+		if $(DOCKER_COMPOSE) -f "$$file" config --quiet 2>/dev/null; then \
+			echo "  $(GREEN)✓$(RESET) $$file"; \
+		else \
+			echo "  $(RED)✗$(RESET) $$file has errors"; \
+			ERRORS=$$((ERRORS + 1)); \
+		fi; \
+	done; \
+	echo ""; \
+	echo "$(CYAN)Checking dashboard JSON...$(RESET)"; \
+	for file in $$(find grafana logging metrics telemetry -path '*/provisioning/dashboards/json/*.json' -type f); do \
+		if docker run --rm -v "$(PWD)/$$file:/file.json:ro" mikefarah/yq '.' /file.json >/dev/null 2>&1; then \
+			echo "  $(GREEN)✓$(RESET) $$file"; \
+		else \
+			echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
+			ERRORS=$$((ERRORS + 1)); \
 		fi; \
 	done; \
 	echo ""; \
@@ -682,13 +812,13 @@ clean: ## Remove unused Docker resources (images, networks, volumes)
 
 open: ## Open Grafana dashboard in browser
 	@echo "$(CYAN)Opening Grafana in browser...$(RESET)"
-	@if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then \
+	@if curl -sf $(GRAFANA_URL)/api/health >/dev/null 2>&1; then \
 		if command -v xdg-open >/dev/null 2>&1; then \
-			xdg-open http://localhost:3000 2>/dev/null; \
+			xdg-open $(GRAFANA_URL) 2>/dev/null; \
 		elif command -v open >/dev/null 2>&1; then \
-			open http://localhost:3000; \
+			open $(GRAFANA_URL); \
 		else \
-			echo "$(YELLOW)Could not detect browser. Open manually: http://localhost:3000$(RESET)"; \
+			echo "$(YELLOW)Could not detect browser. Open manually: $(GRAFANA_URL)$(RESET)"; \
 		fi; \
 	else \
 		echo "$(RED)Grafana is not running. Run 'make install' first.$(RESET)"; \
@@ -719,6 +849,8 @@ version: ## Show versions of all OIB components
 	@docker inspect oib-alloy-metrics --format '  Alloy (metrics)      {{.Config.Image}}' 2>/dev/null || echo "  Alloy (metrics)      (not running)"
 	@docker inspect oib-alloy-telemetry --format '  Alloy (telemetry)    {{.Config.Image}}' 2>/dev/null || echo "  Alloy (telemetry)    (not running)"
 	@docker inspect oib-cadvisor --format '  cAdvisor             {{.Config.Image}}' 2>/dev/null || echo "  cAdvisor             (not running)"
+	@docker inspect oib-blackbox-exporter --format '  Blackbox Exporter    {{.Config.Image}}' 2>/dev/null || echo "  Blackbox Exporter    (not running)"
+	@docker inspect oib-pyroscope --format '  Pyroscope            {{.Config.Image}}' 2>/dev/null || echo "  Pyroscope            (not installed)"
 	@echo ""
 
 demo: ## Generate sample data to demonstrate all stacks
@@ -726,21 +858,62 @@ demo: ## Generate sample data to demonstrate all stacks
 	@echo "$(BOLD)🎬 Generating demo data...$(RESET)"
 	@echo ""
 	@echo "$(CYAN)1. Generating logs...$(RESET)"
-	@for i in 1 2 3 4 5; do \
-		docker run --rm --network oib-network --log-driver json-file alpine echo "Demo log message $$i from OIB at $$(date)"; \
-	done
-	@echo "   $(GREEN)✓$(RESET) Created 5 log entries"
+	@now=$$(date +%s); \
+	timestamp_ns="$${now}000000000"; \
+	log_id=$$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n'); \
+	message="OIB demo log $$log_id"; \
+	if ! curl -fsS -X POST "$(LOKI_URL)/loki/api/v1/push" \
+		-H "Content-Type: application/json" \
+		-d "{\"streams\":[{\"stream\":{\"job\":\"oib-demo\"},\"values\":[[\"$$timestamp_ns\",\"$$message\"]]}]}" \
+		>/dev/null; then \
+		echo "   $(RED)✗$(RESET) Could not send log (is Loki running at $(LOKI_URL)?)"; \
+		exit 1; \
+	fi; \
+	found=false; \
+	for attempt in 1 2 3 4 5; do \
+		if curl -fsS -G "$(LOKI_URL)/loki/api/v1/query_range" \
+			--data-urlencode "query={job=\"oib-demo\"} |= \"$$log_id\"" \
+			--data-urlencode "start=$$((now - 5))000000000" \
+			--data-urlencode "end=$$((now + 5))000000000" | grep -q "$$log_id"; then \
+			found=true; \
+			break; \
+		fi; \
+		sleep 1; \
+	done; \
+	if [ "$$found" = "true" ]; then \
+		echo "   $(GREEN)✓$(RESET) Log is searchable in Loki (ID: $$log_id)"; \
+	else \
+		echo "   $(RED)✗$(RESET) Log was accepted but did not become searchable in Loki"; \
+		exit 1; \
+	fi
 	@echo ""
 	@echo "$(CYAN)2. Sending sample trace...$(RESET)"
-	@curl -s -X POST http://localhost:4318/v1/traces \
+	@now=$$(date +%s); \
+	start_ns="$${now}000000000"; \
+	end_ns="$$((now + 1))000000000"; \
+	trace_id=$$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n'); \
+	span_id=$$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n'); \
+	if ! curl -fsS -X POST "$(OTEL_HTTP_URL)/v1/traces" \
 		-H "Content-Type: application/json" \
-		-d '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"oib-demo"}}]},"scopeSpans":[{"spans":[{"traceId":"00000000000000000000000000000001","spanId":"0000000000000001","name":"demo-span","kind":1,"startTimeUnixNano":"1234567890000000000","endTimeUnixNano":"1234567891000000000"}]}]}]}' \
-		>/dev/null 2>&1 && \
-		echo "   $(GREEN)✓$(RESET) Sent trace to Tempo" || \
-		echo "   $(RED)✗$(RESET) Could not send trace (is Tempo running?)"
+		-d "{\"resourceSpans\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":\"oib-demo\"}}]},\"scopeSpans\":[{\"spans\":[{\"traceId\":\"$$trace_id\",\"spanId\":\"$$span_id\",\"name\":\"demo-span\",\"kind\":1,\"startTimeUnixNano\":\"$$start_ns\",\"endTimeUnixNano\":\"$$end_ns\"}]}]}]}" \
+		>/dev/null; then \
+		echo "   $(RED)✗$(RESET) Could not send trace (is Alloy telemetry running at $(OTEL_HTTP_URL)?)"; \
+		exit 1; \
+	fi; \
+	found=false; \
+	for attempt in 1 2 3 4 5 6 7 8 9 10; do \
+		if curl -fsS "$(TEMPO_URL)/api/traces/$$trace_id" >/dev/null 2>&1; then found=true; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$found" = "true" ]; then \
+		echo "   $(GREEN)✓$(RESET) Trace is searchable in Tempo (trace ID: $$trace_id)"; \
+	else \
+		echo "   $(RED)✗$(RESET) Trace was accepted but did not become searchable in Tempo"; \
+		exit 1; \
+	fi
 	@echo ""
 	@echo "$(GREEN)$(BOLD)Demo complete!$(RESET) Open Grafana to see the data:"
-	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo "  $(YELLOW)$(GRAFANA_URL)$(RESET)"
 	@echo ""
 	@echo "  • $(CYAN)Logs:$(RESET)    Explore → Loki → Run query: {}"
 	@echo "  • $(CYAN)Metrics:$(RESET) Explore → Prometheus → node_cpu_seconds_total"
@@ -789,7 +962,7 @@ demo-examples: ## Run example apps and generate traffic for all languages
 	done
 	@echo ""
 	@echo "$(GREEN)$(BOLD)Example traffic generated!$(RESET) Explore in Grafana:"
-	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo "  $(YELLOW)$(GRAFANA_URL)$(RESET)"
 	@echo ""
 
 demo-app: ## Start demo app with PostgreSQL & Redis (realistic traces)
@@ -870,7 +1043,7 @@ demo-traffic: ## Generate traffic to demo app for realistic traces
 	@echo "$(GREEN)$(BOLD)Traffic generation complete!$(RESET)"
 	@echo ""
 	@echo "Open Grafana to explore traces:"
-	@echo "  $(YELLOW)http://localhost:3000$(RESET)"
+	@echo "  $(YELLOW)$(GRAFANA_URL)$(RESET)"
 	@echo ""
 	@echo "  $(CYAN)Traces:$(RESET)  Explore → Tempo → Service: oib-demo-app"
 	@echo "  $(CYAN)Logs:$(RESET)    Explore → Loki → {container_name=\"oib-demo-app\"}"

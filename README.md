@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/Website-in--a--box--tools.tech-blue)](https://in-a-box-tools.tech)
 
-A plug-and-play observability stack for developers. Zero config, production-ready patterns. Clone, run, and get instant observability for your projects using Grafana's LGTM stack.
+A preconfigured, self-hosted observability stack for local development, homelabs, and small teams. Run Prometheus, Loki, Tempo, Alloy, Grafana, and optional Pyroscope in Docker with ready-made dashboards and instrumented examples.
 > **Quick Reference**: `make install` → `make demo` → `make open` → Explore your data!  
 > **One-command path**: `make bootstrap`
 ## 📋 Prerequisites
@@ -66,7 +66,7 @@ make health
 # ...
 ```
 
-Then open **http://localhost:3000** in your browser and log in with credentials from your `.env` file.
+Then open **http://localhost:3000** (or your configured `GRAFANA_PORT`) and log in with credentials from your `.env` file. Grafana opens on the OIB Stack Health dashboard.
 
 ### 🎬 Try It Out
 
@@ -130,7 +130,7 @@ After installation, each stack will display integration endpoints:
 
 ### 📊 Pre-built Dashboards
 
-OIB comes with six ready-to-use dashboards:
+OIB comes with seven ready-to-use dashboards:
 
 | Dashboard | Description |
 |-----------|-------------|
@@ -140,6 +140,7 @@ OIB comes with six ready-to-use dashboards:
 | **Traces Explorer** | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
 | **Profiles Explorer** | CPU, memory, and goroutine profiling with Pyroscope |
 | **Request Latency** | Endpoint probing (Blackbox), k6 load test metrics, latency percentiles |
+| **Stack Health** | Health and ingestion status for the OIB components |
 
 ## ⚙️ Configuration
 
@@ -179,13 +180,14 @@ By default, OIB uses pinned (stable) versions for all images. You can override t
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAFANA_VERSION` | `11.3.1` | Grafana image tag |
-| `LOKI_VERSION` | `3.3.2` | Loki image tag |
-| `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
-| `PROMETHEUS_VERSION` | `v2.48.1` | Prometheus image tag |
-| `CADVISOR_VERSION` | `v0.47.2` | cAdvisor image tag |
-| `BLACKBOX_VERSION` | `v0.25.0` | Blackbox Exporter image tag |
-| `TEMPO_VERSION` | `2.6.1` | Tempo image tag |
+| `GRAFANA_VERSION` | `12.3.2` | Grafana image tag |
+| `LOKI_VERSION` | `3.6.5` | Loki image tag |
+| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
+| `PROMETHEUS_VERSION` | `v3.9.1` | Prometheus image tag |
+| `CADVISOR_VERSION` | `v0.52.1` | cAdvisor image tag |
+| `BLACKBOX_VERSION` | `v0.28.0` | Blackbox Exporter image tag |
+| `TEMPO_VERSION` | `2.10.0` | Tempo image tag |
+| `PYROSCOPE_VERSION` | `1.18.0` | Pyroscope image tag |
 
 **Quick commands:**
 ```bash
@@ -433,9 +435,9 @@ All stacks run on a shared Docker network `oib-network` allowing inter-service c
 
 ## 🔒 Security
 
-OIB includes security hardening for local and self-hosted deployments:
+OIB includes safer defaults for local and self-hosted evaluation:
 
-- **No default passwords**: Grafana credentials configured via `.env` file
+- **Required Grafana password**: Installation stops until the placeholder in `.env` is replaced
 - **Localhost binding**: Internal services (Prometheus, Loki, Tempo, etc.) only listen on `127.0.0.1`
 - **Non-privileged containers**: cAdvisor uses minimal capabilities instead of privileged mode
 - **Resource limits**: All containers have CPU/memory limits
@@ -443,9 +445,12 @@ OIB includes security hardening for local and self-hosted deployments:
 - **Non-root users**: Example apps run as non-root users
 - **Docker HEALTHCHECK**: All example Dockerfiles include health checks for container orchestration
 
-**Public ports** (intentionally exposed for external access):
-- `3000` - Grafana UI
-- `4317/4318` - OTLP endpoints for trace ingestion
+No browser-facing or ingestion ports are publicly exposed by default. To accept LAN traffic, explicitly set `BIND_ADDR=0.0.0.0` for Grafana or `OTEL_BIND_ADDR=0.0.0.0` for OTLP, then apply appropriate firewall and TLS controls.
+
+> [!IMPORTANT]
+> Automatic Docker log collection reads logs from every running container through the Docker socket, not only containers created by OIB. Container logs can contain credentials, tokens, personal data, or other sensitive values. Review `logging/config/alloy-config.alloy` and your applications' logging practices before enabling OIB on a shared host.
+
+The default single-host configuration is intended for development, homelabs, learning, and evaluation. Review the [production hardening guide](docs/production-hardening.md) before considering a production deployment.
 
 ## 📊 Data Retention
 
@@ -463,7 +468,7 @@ Default retention policies (adjust in config files based on storage):
 2. **Resource limits**: Adjust memory/CPU limits in docker-compose files for your hardware
 3. **Ports**: Default ports can be changed via environment variables (see `.env.example`)
 
-## � Troubleshooting
+## 🧰 Troubleshooting
 
 ### Common Issues
 
@@ -582,6 +587,10 @@ PRs welcome! Please follow the existing structure when adding new stacks.
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+
+Third-party containers and software retain their upstream licenses and are not relicensed under MIT. See [NOTICE.md](NOTICE.md) for attribution, trademark, and third-party licensing information.
+
+The Grafana Labs Marks are trademarks of Grafana Labs, and are used with Grafana Labs’ permission. We are not affiliated with, endorsed or sponsored by Grafana Labs or its affiliates.
 
 ## Star History
 

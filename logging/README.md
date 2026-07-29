@@ -47,13 +47,16 @@ Edit `config/alloy-config.alloy`:
 |----------|---------|-------------|
 | `LOKI_PORT` | `3100` | Loki API port |
 | `ALLOY_LOGGING_PORT` | `12345` | Alloy UI port |
-| `LOKI_VERSION` | `3.3.2` | Loki image tag |
-| `ALLOY_VERSION` | `v1.5.1` | Alloy image tag |
+| `LOKI_VERSION` | `3.6.5` | Loki image tag |
+| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
 
 ## Sending Logs
 
 ### From Docker Containers (Automatic)
-Alloy automatically collects logs from all containers on `oib-network`.
+Alloy discovers and collects logs from every running container through the Docker socket, including containers outside `oib-network`.
+
+> [!IMPORTANT]
+> Container logs can contain credentials, tokens, personal data, or other sensitive values. Add discovery relabel rules in `config/alloy-config.alloy` if collection should be limited to selected containers.
 
 ### Direct Push to Loki
 ```bash
