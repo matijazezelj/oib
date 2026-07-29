@@ -34,7 +34,7 @@ jobs:
             examples/python-flask/compose.yaml \
             examples/php-laravel/compose.yaml \
             examples/ruby-rails/compose.yaml; do
-            docker compose -f "$file" config >/dev/null
+            docker compose --env-file .env -f "$file" config >/dev/null
           done
 
       - name: Validate docs and dashboard assets
