@@ -79,8 +79,13 @@ All OIB dashboards organized in one folder, with tags for easy filtering.
 
 ![OIB Dashboards](assets/images/dashboards.png)
 
+### Stack Health
+At-a-glance status for the OIB services, Prometheus ingestion, scrape targets, and alerts.
+
+![OIB Stack Health](assets/images/stack-health.png)
+
 ### System Overview
-Real-time CPU, memory, disk gauges plus per-container resource usage.
+Host CPU and memory gauges with system and container resource charts.
 
 ![System Overview](assets/images/system-overview.png)
 
@@ -90,7 +95,7 @@ Log volume by container, live log stream, and dedicated errors/warnings panel.
 ![Logs Explorer](assets/images/logs-explorer.png)
 
 ### Traces Explorer
-Full distributed tracing with PostgreSQL, Redis, and HTTP spans visible.
+TraceQL examples and OpenTelemetry setup guidance for the included example languages.
 
 ![Traces Explorer](assets/images/traces-explorer.png)
 
@@ -105,7 +110,7 @@ Detailed host system metrics: CPU, memory, disk I/O, filesystem, and network.
 ![Host Metrics](assets/images/host-metrics.png)
 
 ### Profiles Explorer
-Continuous profiling with flame graphs to find performance bottlenecks.
+Pyroscope integration guidance and language-specific setup examples.
 
 ![Profiles Explorer](assets/images/profiles-explorer.png)
 

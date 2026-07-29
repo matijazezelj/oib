@@ -46,7 +46,10 @@ jobs:
           test -f docs/troubleshooting.md
           test -f grafana/provisioning/dashboards/json/system-overview.json
           test -f grafana/provisioning/dashboards/json/traces-explorer.json
-          ! grep -R $'\uFFFD' README.md docs
+          for image in dashboards stack-health system-overview host-metrics logs-explorer traces-explorer request-latency profiles-explorer; do
+            test -f "docs/assets/images/$image.png"
+          done
+          ! grep -R -I $'\uFFFD' README.md docs
 
   lint:
     runs-on: ubuntu-latest
