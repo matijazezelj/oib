@@ -19,6 +19,10 @@ jobs:
         run: cp .env.example .env
 
       - name: Validate Docker Compose files
+        env:
+          # The example intentionally leaves this required secret empty. CI uses
+          # an explicit non-production value solely to validate interpolation.
+          GRAFANA_ADMIN_PASSWORD: ci-compose-validation-only
         run: |
           set -euo pipefail
           for file in \
@@ -83,3 +87,10 @@ jobs:
           make help >/dev/null
           make -n health >/dev/null
           make -n demo >/dev/null
+
+      - name: Reject unsafe Make endpoint values
+        run: |
+          set -euo pipefail
+          printf '\nGRAFANA_PORT=3000;touch /tmp/oib-make-injection\n' >> .env
+          output=$(make -n open)
+          ! grep -Fq 'touch /tmp/oib-make-injection' <<<"$output"
