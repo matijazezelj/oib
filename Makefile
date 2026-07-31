@@ -22,25 +22,26 @@ BOLD := \033[1m
 # Docker compose command - include root .env file for all stacks
 DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env
 
-# Read only the simple endpoint values needed by Make. Docker Compose remains
-# responsible for parsing the complete .env file.
-env_value = $(strip $(shell awk -F= '$$1 == "$(1)" { print substr($$0, index($$0, "=") + 1); exit }' "$(CURDIR)/.env" 2>/dev/null))
+# Read only endpoint values needed by Make and emit them only when they match
+# their expected grammar. Raw .env text must never be spliced into shell recipes.
+env_port = $(strip $(shell awk -F= '$$1 == "$(1)" { v=substr($$0,index($$0,"=")+1); if (v ~ /^[0-9]+$$/) print v; exit }' "$(CURDIR)/.env" 2>/dev/null))
+env_addr = $(strip $(shell awk -F= '$$1 == "$(1)" { v=substr($$0,index($$0,"=")+1); if (v ~ /^[A-Za-z0-9_.:-]+$$/) print v; exit }' "$(CURDIR)/.env" 2>/dev/null))
 
-BIND_ADDR := $(or $(call env_value,BIND_ADDR),127.0.0.1)
-GRAFANA_PORT := $(or $(call env_value,GRAFANA_PORT),3000)
-LOKI_PORT := $(or $(call env_value,LOKI_PORT),3100)
-ALLOY_LOGGING_PORT := $(or $(call env_value,ALLOY_LOGGING_PORT),12345)
-PROMETHEUS_PORT := $(or $(call env_value,PROMETHEUS_PORT),9090)
-ALLOY_METRICS_PORT := $(or $(call env_value,ALLOY_METRICS_PORT),12347)
-CADVISOR_PORT := $(or $(call env_value,CADVISOR_PORT),8080)
-BLACKBOX_PORT := $(or $(call env_value,BLACKBOX_PORT),9115)
-TEMPO_HTTP_PORT := $(or $(call env_value,TEMPO_HTTP_PORT),3200)
-TEMPO_GRPC_PORT := $(or $(call env_value,TEMPO_GRPC_PORT),9095)
-OTEL_BIND_ADDR := $(or $(call env_value,OTEL_BIND_ADDR),127.0.0.1)
-OTEL_GRPC_PORT := $(or $(call env_value,OTEL_GRPC_PORT),4317)
-OTEL_HTTP_PORT := $(or $(call env_value,OTEL_HTTP_PORT),4318)
-ALLOY_TELEMETRY_PORT := $(or $(call env_value,ALLOY_TELEMETRY_PORT),12346)
-PYROSCOPE_PORT := $(or $(call env_value,PYROSCOPE_PORT),4040)
+BIND_ADDR := $(or $(call env_addr,BIND_ADDR),127.0.0.1)
+GRAFANA_PORT := $(or $(call env_port,GRAFANA_PORT),3000)
+LOKI_PORT := $(or $(call env_port,LOKI_PORT),3100)
+ALLOY_LOGGING_PORT := $(or $(call env_port,ALLOY_LOGGING_PORT),12345)
+PROMETHEUS_PORT := $(or $(call env_port,PROMETHEUS_PORT),9090)
+ALLOY_METRICS_PORT := $(or $(call env_port,ALLOY_METRICS_PORT),12347)
+CADVISOR_PORT := $(or $(call env_port,CADVISOR_PORT),8080)
+BLACKBOX_PORT := $(or $(call env_port,BLACKBOX_PORT),9115)
+TEMPO_HTTP_PORT := $(or $(call env_port,TEMPO_HTTP_PORT),3200)
+TEMPO_GRPC_PORT := $(or $(call env_port,TEMPO_GRPC_PORT),9095)
+OTEL_BIND_ADDR := $(or $(call env_addr,OTEL_BIND_ADDR),127.0.0.1)
+OTEL_GRPC_PORT := $(or $(call env_port,OTEL_GRPC_PORT),4317)
+OTEL_HTTP_PORT := $(or $(call env_port,OTEL_HTTP_PORT),4318)
+ALLOY_TELEMETRY_PORT := $(or $(call env_port,ALLOY_TELEMETRY_PORT),12346)
+PYROSCOPE_PORT := $(or $(call env_port,PYROSCOPE_PORT),4040)
 
 GRAFANA_CONNECT_HOST := $(if $(filter 0.0.0.0,$(BIND_ADDR)),127.0.0.1,$(BIND_ADDR))
 OTEL_CONNECT_HOST := $(if $(filter 0.0.0.0,$(OTEL_BIND_ADDR)),127.0.0.1,$(OTEL_BIND_ADDR))
@@ -158,8 +159,8 @@ install: ## Install all observability stacks
 		echo ""; \
 		exit 1; \
 	fi
-	@if grep -q "CHANGE_ME" .env 2>/dev/null; then \
-		echo "$(RED)$(BOLD)✗ Placeholder password detected in .env$(RESET)"; \
+	@if ! grep -Eq '^GRAFANA_ADMIN_PASSWORD=.+$$' .env 2>/dev/null || grep -Eq '^GRAFANA_ADMIN_PASSWORD=CHANGE_ME' .env 2>/dev/null; then \
+		echo "$(RED)$(BOLD)✗ Grafana admin password is empty or still a placeholder$(RESET)"; \
 		echo "$(YELLOW)  Set GRAFANA_ADMIN_PASSWORD before starting OIB.$(RESET)"; \
 		echo ""; \
 		exit 1; \
