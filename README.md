@@ -10,7 +10,7 @@ A preconfigured, self-hosted observability stack for local development, homelabs
 
 Before you begin, ensure you have:
 
-- **Docker** 20.10+ ([Install Docker](https://docs.docker.com/get-docker/)) or **Podman** 4.0+ with podman-compose
+- **Docker** 20.10+ ([Install Docker](https://docs.docker.com/get-docker/)) or **Podman** 4.0+ with podman-compose (the Makefile always calls `docker` / `docker compose` and the collectors mount `/var/run/docker.sock`, so Podman only works where those resolve to Podman)
 - **Docker Compose** v2+ (included with Docker Desktop)
 - **Make** (pre-installed on macOS/Linux, [Windows](https://gnuwin32.sourceforge.net/packages/make.htm))
 - **2GB+ RAM** recommended
@@ -31,9 +31,10 @@ git clone https://github.com/matijazezelj/oib.git && cd oib
 
 # Configure credentials (required)
 cp .env.example .env
-# Edit .env and set a secure GRAFANA_ADMIN_PASSWORD
+# Edit .env and set GRAFANA_ADMIN_PASSWORD (it ships empty; make install
+# refuses to run while it is empty or starts with CHANGE_ME)
 
-# Install all stacks
+# Install all stacks (logging, metrics, telemetry, Grafana)
 make install
 
 # Verify installation
@@ -46,7 +47,11 @@ make install-logging    # Loki + Alloy
 make install-metrics    # Prometheus + Alloy + cAdvisor
 make install-telemetry  # Tempo + Alloy
 make install-grafana    # Unified Grafana with all datasources
+make install-profiling  # Pyroscope (optional, not part of make install)
+make install-services   # PostgreSQL + Redis (optional, not part of make install)
 ```
+
+`make install` runs `make preflight` first, which stops if Docker is not running, if two endpoints share a port in `.env`, or (when `lsof` is available) if a required port is already taken by a non-OIB process.
 
 ### ✅ Verify Installation
 
@@ -73,14 +78,16 @@ Then open **http://localhost:3000** (or your configured `GRAFANA_PORT`) and log 
 After installation, generate some demo data to see everything working:
 
 ```bash
-# Generate sample logs, metrics, and traces
+# Push a test log line to Loki and a test trace through Alloy to Tempo
 make demo
 
 # Open Grafana in your browser
 make open
 ```
 
-This creates sample data across all three pillars so you can immediately explore the dashboards.
+`make demo` sends one log line (label `job="oib-demo"`) and one trace (service `oib-demo`) and checks that both become searchable. Metrics need no demo step: host, container and probe metrics are collected as soon as the metrics stack is running.
+
+For richer data, `make demo-app` starts a Python app with PostgreSQL and Redis and `make demo-traffic` sends it requests; `make demo-examples` starts the Flask, Express, Rails and PHP examples and sends traffic to them. See [examples/README.md](examples/README.md) and the [known limitations](docs/troubleshooting.md#known-limitations) (the demo app and the examples cannot all run at once).
 
 ## 📦 What's Included
 
@@ -100,7 +107,7 @@ After installation, each stack will display integration endpoints:
 ### Logging Stack
 - **Loki API**: `http://localhost:3100` (localhost only - use from host or oib-network)
 - **Alloy UI**: `http://localhost:12345` (view pipeline status)
-- **Auto-collection**: Alloy automatically collects logs from all Docker containers
+- **Auto-collection**: Alloy collects stdout/stderr of every container on the host through the Docker socket, whatever network it is on. Logs are labelled `container_name`, `compose_project`, `compose_service`, `image` and `container_id`.
 
 > **From Docker containers**: Use `oib-loki:3100` on `oib-network`
 
@@ -108,19 +115,22 @@ After installation, each stack will display integration endpoints:
 - **Prometheus**: `http://localhost:9090` (localhost only)
 - **Alloy Metrics UI**: `http://localhost:12347` (host metrics pipeline)
 - **cAdvisor**: `http://localhost:8080` (localhost only)
+- **Blackbox Exporter**: `http://localhost:9115` (localhost only)
+- **Pushgateway** (optional): `http://localhost:9091`, started with `cd metrics && docker compose --env-file ../.env --profile pushgateway up -d`; then uncomment its scrape job in `metrics/config/prometheus.yml`
 
 > **From Docker containers**: Use hostnames like `oib-prometheus:9090` on `oib-network`
 
 ### Telemetry Stack
 - **OTLP gRPC**: `localhost:4317` by default; set `OTEL_BIND_ADDR=0.0.0.0` to accept traces from LAN clients
 - **OTLP HTTP**: `http://localhost:4318` by default; set `OTEL_BIND_ADDR=0.0.0.0` to accept traces from LAN clients
-- **Tempo API**: `http://localhost:3200` (localhost only)
+- **Tempo API**: `http://localhost:3200` (localhost only); Tempo gRPC on `localhost:9095`
+- **Alloy Telemetry UI**: `http://localhost:12346` (localhost only)
 
-> **From Docker containers**: Use `oib-alloy-telemetry:4317` on `oib-network`
+> **From Docker containers**: Use `oib-alloy-telemetry:4317` (gRPC) or `http://oib-alloy-telemetry:4318` (HTTP) on `oib-network`. On Linux, `host.docker.internal:4318` does not reach the receivers while `OTEL_BIND_ADDR` is the default `127.0.0.1`.
 
 ### Profiling Stack (Optional)
-- **Pyroscope**: `http://localhost:4040` (localhost only)
-- **Install**: `make install-profiling`
+- **Pyroscope**: `http://localhost:4040` (localhost only; there is no bind-address setting, so SDKs on other hosts cannot reach it)
+- **Install**: `make install-profiling`, then `make restart-grafana`
 
 > **From Docker containers**: Use `oib-pyroscope:4040` on `oib-network`
 
@@ -130,17 +140,32 @@ After installation, each stack will display integration endpoints:
 
 ### 📊 Pre-built Dashboards
 
-OIB comes with seven ready-to-use dashboards:
+OIB comes with seven ready-to-use dashboards, provisioned from `grafana/provisioning/dashboards/json/` into the **OIB** folder:
 
-| Dashboard | Description |
-|-----------|-------------|
-| **System Overview** | Container CPU/memory, disk usage, network I/O |
-| **Host Metrics** | Detailed host system metrics (CPU, memory, disk, network) via Alloy |
-| **Logs Explorer** | Log volume, live logs, errors/warnings panel |
-| **Traces Explorer** | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
-| **Profiles Explorer** | CPU, memory, and goroutine profiling with Pyroscope |
-| **Request Latency** | Endpoint probing (Blackbox), k6 load test metrics, latency percentiles |
-| **Stack Health** | Health and ingestion status for the OIB components |
+| Dashboard | File | Description |
+|-----------|------|-------------|
+| **OIB - System Overview** | `system-overview.json` | Container CPU/memory, disk usage, network I/O |
+| **OIB - Host Metrics** | `host-metrics.json` | Detailed host system metrics (CPU, memory, disk, network) via Alloy |
+| **OIB - Logs Explorer** | `logs-explorer.json` | Log volume, live logs, errors/warnings panel |
+| **OIB - Traces Explorer** | `traces-explorer.json` | TraceQL examples, Python, Node.js, Ruby & PHP code samples |
+| **OIB - Profiles Explorer** | `profiles-explorer.json` | Pyroscope setup guidance and per-language examples (text panels; view profiles in Explore → Pyroscope after `make install-profiling`) |
+| **OIB - Request Latency** | `request-latency.json` | Endpoint probing (Blackbox), k6 load test metrics (p99) |
+| **OIB Stack Health** | `oib-internals.json` | Grafana's home dashboard: component status, Prometheus storage and ingestion, scrape targets, firing/pending alerts |
+
+Dashboards are re-read from disk every 30 seconds and can be edited in the UI (`allowUiUpdates: true`), but UI edits are overwritten when the JSON file changes.
+
+### Provisioned Datasources
+
+Defined in `grafana/provisioning/datasources/datasources.yml` (not editable in the UI):
+
+| Name (uid) | URL | Notes |
+|------------|-----|-------|
+| Prometheus (`prometheus`) | `http://oib-prometheus:9090` | Default datasource |
+| Loki (`loki`) | `http://oib-loki:3100` | |
+| Tempo (`tempo`) | `http://oib-tempo:3200` | Trace-to-logs, trace-to-metrics, trace-to-profiles links, node graph |
+| Pyroscope (`pyroscope`) | `http://oib-pyroscope:4040` | Always provisioned; errors until `make install-profiling` |
+
+Tempo's service graph view is configured but stays empty; see [known limitations](docs/troubleshooting.md#known-limitations).
 
 ## ⚙️ Configuration
 
@@ -156,10 +181,11 @@ cp .env.example .env
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GRAFANA_ADMIN_USER` | `admin` | Grafana admin username |
-| `GRAFANA_ADMIN_PASSWORD` | (required) | Grafana admin password |
+| `GRAFANA_ADMIN_PASSWORD` | (required, empty in `.env.example`) | Grafana admin password. Grafana uses it when it first creates its database; changing it later has no effect on an existing `oib-grafana-data` volume (change it in the Grafana UI instead) |
 | `BIND_ADDR` | `127.0.0.1` | Bind address for Grafana/browser-facing endpoints |
 | `GRAFANA_PORT` | `3000` | Grafana web UI port |
 | `LOKI_PORT` | `3100` | Loki API port (localhost only) |
+| `ALLOY_LOGGING_PORT` | `12345` | Alloy logging UI port (localhost only) |
 | `PROMETHEUS_PORT` | `9090` | Prometheus API port (localhost only) |
 | `ALLOY_METRICS_PORT` | `12347` | Alloy metrics UI port (localhost only) |
 | `CADVISOR_PORT` | `8080` | cAdvisor port (localhost only) |
@@ -169,10 +195,21 @@ cp .env.example .env
 | `OTEL_BIND_ADDR` | `127.0.0.1` | Bind address for OTLP receivers; use `0.0.0.0` for LAN trace ingestion |
 | `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver |
 | `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver |
+| `ALLOY_TELEMETRY_PORT` | `12346` | Alloy telemetry UI port (localhost only) |
 | `PROMETHEUS_RETENTION_TIME` | `15d` | Prometheus data retention time |
 | `PROMETHEUS_RETENTION_SIZE` | `5GB` | Prometheus data retention size |
+| `PYROSCOPE_PORT` | `4040` | Pyroscope port (localhost only, optional stack) |
+| `PUSHGATEWAY_PORT` | `9091` | Pushgateway port (localhost only, optional `pushgateway` profile) |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `oib` / `oib_secret` / `oib_demo` | Shared services and demo app database (change the password if the host is shared) |
+| `POSTGRES_PORT` / `REDIS_PORT` | `5432` / `6379` | Shared services host ports (localhost only) |
+| `DEMO_BIND_ADDR` | `127.0.0.1` | Bind address for the demo app and example apps |
+| `DEMO_APP_PORT` | `5000` | Demo app host port (`make demo-app` / `demo-traffic` still probe `localhost:5000`) |
+| `PYROSCOPE_ENABLED` | `true` | Pyroscope SDK in the demo app |
+| `TZ` | `UTC` | Timezone; only reaches containers that load `.env` via `env_file` (Grafana, Loki, Prometheus, Tempo, Pyroscope) |
 
 > **Note**: Loki and Tempo retention are configured in their respective config files, not via environment variables.
+>
+> **Applying changes**: `.env` values are read when containers are created. After changing a port, bind address, retention or version, run `make install` (or `make install-<stack>`), which recreates only the changed containers and keeps data. `make restart` does **not** apply `.env` changes.
 
 ### Image Version Overrides
 
@@ -180,14 +217,15 @@ By default, OIB uses pinned (stable) versions for all images. You can override t
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAFANA_VERSION` | `12.3.2` | Grafana image tag |
-| `LOKI_VERSION` | `3.6.5` | Loki image tag |
-| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
-| `PROMETHEUS_VERSION` | `v3.9.1` | Prometheus image tag |
-| `CADVISOR_VERSION` | `v0.52.1` | cAdvisor image tag |
-| `BLACKBOX_VERSION` | `v0.28.0` | Blackbox Exporter image tag |
-| `TEMPO_VERSION` | `2.10.0` | Tempo image tag |
-| `PYROSCOPE_VERSION` | `1.18.0` | Pyroscope image tag |
+| `GRAFANA_VERSION` | `13.3.1` | Grafana image tag |
+| `LOKI_VERSION` | `3.7.10` | Loki image tag |
+| `ALLOY_VERSION` | `v1.22.0` | Alloy image tag |
+| `PROMETHEUS_VERSION` | `v3.16.0` | Prometheus image tag |
+| `CADVISOR_VERSION` | `v0.60.6` | cAdvisor image tag |
+| `BLACKBOX_VERSION` | `v0.29.1` | Blackbox Exporter image tag |
+| `TEMPO_VERSION` | `3.1.1` | Tempo image tag |
+| `PYROSCOPE_VERSION` | `2.4.3` | Pyroscope image tag |
+| `PUSHGATEWAY_VERSION` | `v1.11.4` | Pushgateway image tag (optional profile) |
 
 **Quick commands:**
 ```bash
@@ -195,7 +233,7 @@ By default, OIB uses pinned (stable) versions for all images. You can override t
 make latest
 
 # Revert to pinned (stable) versions
-make install
+make install    # make install-profiling too, if Pyroscope was switched to :latest
 
 # Override a single service version
 GRAFANA_VERSION=12.0.0 make update-grafana
@@ -203,21 +241,27 @@ GRAFANA_VERSION=12.0.0 make update-grafana
 
 ## 🛠️ Commands
 
+Run `make help` for the grouped list. Stack-specific variants take a `-grafana`, `-logging`, `-metrics`, `-telemetry`, `-profiling` or `-services` suffix (for example `make stop-metrics`, `make logs-services`).
+
 ```bash
 # Installation
-make install              # Install all stacks
+make install              # Install all core stacks (runs preflight first)
 make install-logging      # Install logging stack only
 make install-metrics      # Install metrics stack only
 make install-telemetry    # Install telemetry stack only
 make install-grafana      # Install unified Grafana
+make install-profiling    # Install Pyroscope (optional)
+make install-services     # Install PostgreSQL + Redis (optional)
+make network              # Create the shared oib-network (done by every install-*)
 
 # Health & Diagnostics
-make health               # Quick health check of all services
-make doctor               # Diagnose common issues (Docker, ports, config)
+make preflight            # Check Docker, Compose and port conflicts
+make health               # Quick health check of all services (exits non-zero on failure)
+make doctor               # Diagnose common issues (Docker, .env, network, ports)
 make status               # Show all services with health indicators
-make check-ports          # Check if required ports are available
-make ps                   # Show running OIB containers
-make validate             # Validate configuration files
+make check-ports          # Check if required ports are available (needs lsof)
+make ps                   # Show running containers on oib-network
+make validate             # Validate YAML configs, compose files and dashboard JSON
 
 # Load Testing
 make test-load            # Run k6 basic load test
@@ -227,38 +271,62 @@ make test-api             # Run API endpoint load test
 
 # Utilities
 make open                 # Open Grafana in browser
-make demo                 # Generate sample data (logs, metrics, traces)
-make demo-examples        # Run example apps and generate traffic
+make demo                 # Send a test log and trace and check they are searchable
+make demo-app             # Start the demo app with PostgreSQL & Redis
+make demo-traffic         # Send requests to the demo app
+make demo-app-stop        # Stop the demo app and delete its volumes
+make demo-examples        # Run the four example apps and generate traffic
 make bootstrap            # Install + demo + open Grafana
 make disk-usage           # Show disk space used by OIB
-make version              # Show versions of running components
+make version              # Show image versions of running components
 
-# Management
-make stop                 # Stop all stacks
-make start                # Start all stacks
-make restart              # Restart all stacks
+# Management (core stacks only: grafana, logging, metrics, telemetry)
+make stop                 # Stop all core stacks
+make start                # Start all core stacks
+make restart              # Restart all core stacks (does not apply .env changes)
 make info                 # Show integration endpoints
+make info-profiling       # Show Pyroscope endpoints
+make info-services        # Show PostgreSQL/Redis endpoints
 
 # Logs
-make logs                 # Tail logs from all stacks
+make logs                 # Tail logs from all core stacks
 make logs-grafana         # Tail Grafana logs
 make logs-logging         # Tail Loki + Alloy logs
 make logs-metrics         # Tail Prometheus + exporters logs
 make logs-telemetry       # Tail Tempo + Alloy logs
 make logs-profiling       # Tail Pyroscope logs
+make logs-services        # Tail PostgreSQL + Redis logs
 
 # Maintenance
-make update               # Pull pinned version images and restart
+make update               # Pull pinned images and recreate all core stacks
 make update-grafana       # Update Grafana only
 make update-logging       # Update Loki + Alloy
 make update-metrics       # Update Prometheus + exporters
 make update-telemetry     # Update Tempo + Alloy
+make update-profiling     # Update Pyroscope
 make latest               # Pull and run :latest versions of all images
-make clean                # Remove unused Docker resources
+make clean                # docker system prune -f (HOST-WIDE, see below)
+
+# Backup & Restore (see "Backup and Restore" below)
+make backup               # Back up Prometheus, Loki, Tempo and Grafana volumes
+make restore              # List backups and show restore commands
 
 # Cleanup
-make uninstall            # Remove all stacks and volumes (with confirmation)
+make uninstall            # Remove core stacks, their volumes and oib-network (with confirmation)
+make uninstall-profiling  # Remove Pyroscope and its volume
+make uninstall-services   # Remove PostgreSQL + Redis and their volumes
 ```
+
+Notes:
+- `start`, `stop`, `restart`, `update`, `info`, `logs` and `uninstall` act on the four core stacks only. Use the `-profiling` / `-services` targets for the optional stacks. `make uninstall` tries to remove `oib-network` and silently leaves it in place if Pyroscope, the shared services or any other container is still attached.
+- `make update` runs `up -d` for every core stack, so it also creates any core stack that was not installed. It needs `oib-network` to exist.
+- `make latest` runs the core stacks on `:latest` images and switches Pyroscope only if it is already installed. Run `make install` to return to the pinned versions.
+- `make clean` runs `docker system prune -f` for the **whole Docker host**: it removes every stopped container, unused network, dangling image and build cache, not only OIB's. It does not remove volumes. If OIB is stopped at that moment, its stopped containers and `oib-network` are removed too (run `make install` to recreate them; data in volumes is kept).
+- `DEBUG=1` (e.g. `make install DEBUG=1`) adds `--verbose` to every `docker compose` call.
+
+### Shell Completions
+
+Tab-completion for all `make` targets in this directory is available for zsh (`completions/_oib`) and bash (`completions/oib.bash`). Installation steps are in [completions/README.md](completions/README.md).
 
 ## 📁 Project Structure
 
@@ -280,7 +348,8 @@ oib/
 │       ├── prometheus.yml
 │       ├── alloy-metrics.alloy # Host metrics via Alloy
 │       ├── blackbox.yml        # Blackbox exporter probe modules
-│       └── rules/              # Alerting rules (future)
+│       └── rules/
+│           └── oib-alerts.yml  # Prometheus alert rules (loaded, no Alertmanager)
 ├── telemetry/
 │   ├── README.md               # Telemetry stack documentation
 │   ├── compose.yaml
@@ -294,13 +363,23 @@ oib/
 │       ├── datasources/
 │       │   └── datasources.yml
 │       └── dashboards/
+│           ├── dashboards.yml  # Dashboard provider (folder "OIB")
 │           └── json/
+│               ├── oib-internals.json   # OIB Stack Health (home dashboard)
 │               ├── system-overview.json
 │               ├── host-metrics.json
 │               ├── logs-explorer.json
 │               ├── traces-explorer.json
 │               ├── profiles-explorer.json
 │               └── request-latency.json
+├── profiling/
+│   ├── README.md               # Profiling stack documentation
+│   └── compose.yaml            # Pyroscope (optional)
+├── services/
+│   ├── compose.yaml            # PostgreSQL + Redis (optional)
+│   └── init/                   # Database schema and seed data (also used by the demo app)
+├── completions/                # zsh and bash completion for make targets
+├── docs/                       # GitHub Pages site and guides
 ├── testing/
 │   ├── README.md               # Load testing documentation
 │   ├── compose.yaml      # k6 load testing
@@ -311,24 +390,32 @@ oib/
 │       └── api-load.js
 └── examples/
     ├── README.md               # Example integration guide
+    ├── demo-app/               # Python demo app with PostgreSQL + Redis (make demo-app)
     ├── python-flask/           # Python Flask example app
     ├── node-express/           # Node.js Express example app
     ├── ruby-rails/             # Ruby on Rails example app
-    └── php-laravel/            # PHP Laravel example app
+    └── php-laravel/            # Plain PHP example app (built-in server, no Laravel framework)
 ```
 
 ## 🔧 Configuration
 
 ### Custom Prometheus Scrape Targets
 
-Edit `metrics/config/prometheus.yml` to add your services:
+Prometheus only scrapes static targets (there is no Docker service discovery). Edit `metrics/config/prometheus.yml` to add your services:
 
 ```yaml
 scrape_configs:
   - job_name: 'my-app'
     static_configs:
-      - targets: ['host.docker.internal:8080']
+      - targets: ['host.docker.internal:8080']   # app on the host
+      # - targets: ['my-app:8080']              # container on oib-network
 ```
+
+Then reload Prometheus with `docker exec oib-prometheus kill -HUP 1` or `make restart-metrics`. The example apps expose `/metrics`, but no scrape job for them ships, so add one if you want their metrics.
+
+### Alert Rules
+
+`metrics/config/rules/oib-alerts.yml` is loaded by Prometheus and defines alerts for OIB components, host resources, containers, Prometheus itself and Blackbox probes (endpoint down, slow response, TLS certificate expiry). No Alertmanager is configured, so alerts are only visible in Prometheus (`http://localhost:9090/alerts`) and on the OIB Stack Health dashboard. See the [production hardening guide](docs/production-hardening.md#alerting) to route them somewhere.
 
 ### Container Metrics
 
@@ -338,25 +425,18 @@ cAdvisor collects container metrics automatically. In the System Overview dashbo
 
 ### Send container logs to Loki
 
-```yaml
-# In your app's compose.yaml
-services:
-  my-app:
-    logging:
-      driver: loki
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        labels: "app"
-```
+Nothing to configure: Alloy already ships the stdout/stderr of every container on the host. Query them in Grafana with, for example, `{container_name="my-app"}` or `{compose_service="my-app"}`.
+
+Applications outside Docker can push to the Loki API at `http://localhost:3100/loki/api/v1/push`.
 
 ### Expose Prometheus metrics
 
+Labels such as `prometheus.scrape=true` are **not** read by OIB. Add a static scrape job instead (see [Custom Prometheus Scrape Targets](#custom-prometheus-scrape-targets)):
+
 ```yaml
-services:
-  my-app:
-    labels:
-      - "prometheus.scrape=true"
-      - "prometheus.port=8080"
+  - job_name: 'my-app'
+    static_configs:
+      - targets: ['my-app:8080']   # my-app attached to oib-network
 ```
 
 ### Send traces via OTLP
@@ -387,15 +467,17 @@ Blackbox Exporter performs synthetic monitoring by probing your endpoints from t
 
 ### Features
 
-- HTTP/HTTPS endpoint health checks
-- TCP port connectivity tests  
-- ICMP ping, DNS resolution, gRPC health checks
-- SSL certificate validation
+Probe modules are defined in `metrics/config/blackbox.yml`. Only the `blackbox-http` job (module `http_2xx`) is active; TCP and ICMP jobs are commented templates in `prometheus.yml`.
+
+- HTTP/HTTPS endpoint health checks (`http_2xx`, `http_post_2xx`, `http_2xx_content`)
+- TCP port connectivity tests (`tcp_connect`, `tcp_tls`)
+- ICMP ping, DNS resolution, gRPC health checks (`icmp`, `dns_lookup`, `grpc`, `grpc_tls`)
+- TLS certificate checks: the default `http_2xx` module sets `insecure_skip_verify: true`, so invalid certificates do not fail the probe. Use the `https_2xx` module for strict validation.
 
 ### Default Monitored Endpoints
 
-OIB monitors its own services by default:
-- Grafana, Prometheus, Loki, Tempo
+OIB probes its own services by default:
+- Grafana, Prometheus, Loki, Tempo (not Pyroscope, which is optional)
 
 ### Add Your Own Endpoints
 
@@ -437,11 +519,11 @@ All stacks run on a shared Docker network `oib-network` allowing inter-service c
 
 OIB includes safer defaults for local and self-hosted evaluation:
 
-- **Required Grafana password**: Installation stops until the placeholder in `.env` is replaced
+- **Required Grafana password**: `make install` stops while `GRAFANA_ADMIN_PASSWORD` is empty or starts with `CHANGE_ME`, and Grafana's compose file refuses to start without it
 - **Localhost binding**: Internal services (Prometheus, Loki, Tempo, etc.) only listen on `127.0.0.1`
-- **Non-privileged containers**: cAdvisor uses minimal capabilities instead of privileged mode
-- **Resource limits**: All containers have CPU/memory limits
-- **No-new-privileges**: Containers cannot gain additional privileges
+- **Non-privileged containers**: cAdvisor uses minimal capabilities (`SYS_PTRACE`) instead of privileged mode
+- **Resource limits**: All OIB stack containers have CPU/memory limits (not all example containers do)
+- **No-new-privileges**: Set on all OIB stack containers
 - **Non-root users**: Example apps run as non-root users
 - **Docker HEALTHCHECK**: All example Dockerfiles include health checks for container orchestration
 
@@ -450,23 +532,48 @@ No browser-facing or ingestion ports are publicly exposed by default. To accept 
 > [!IMPORTANT]
 > Automatic Docker log collection reads logs from every running container through the Docker socket, not only containers created by OIB. Container logs can contain credentials, tokens, personal data, or other sensitive values. Review `logging/config/alloy-config.alloy` and your applications' logging practices before enabling OIB on a shared host.
 
+> [!WARNING]
+> - `/var/run/docker.sock` is mounted into `oib-alloy-logging` and `oib-cadvisor`. Docker API access is root-equivalent on the host, and `:ro` on the mount does not restrict API calls.
+> - The host root filesystem is mounted read-only (`/:/rootfs:ro`) into `oib-alloy-metrics` and `oib-cadvisor`, so they can read any file on the host.
+> - Grafana, Loki, Prometheus, Tempo and Pyroscope load the whole root `.env` (`env_file: ../.env`), so `GRAFANA_ADMIN_PASSWORD` and `POSTGRES_PASSWORD` are visible in all of them via `docker inspect`.
+>
+> Anyone who can control these containers or run `docker` on the host has full access to it.
+
 The default single-host configuration is intended for development, homelabs, learning, and evaluation. Review the [production hardening guide](docs/production-hardening.md) before considering a production deployment.
 
 ## 📊 Data Retention
 
-Default retention policies (adjust in config files based on storage):
+Default retention policies (adjust based on storage):
 
-| Component | Retention | Config File |
+| Component | Retention | Where to change it |
 |-----------|-----------|-------------|
-| Loki (logs) | 7 days | `logging/config/loki-config.yml` |
-| Tempo (traces) | 3 days | `telemetry/config/tempo.yaml` |
-| Prometheus (metrics) | 15 days or 5GB | `metrics/compose.yaml` |
+| Loki (logs) | 7 days (`retention_period: 168h`, deleted by the compactor) | `logging/config/loki-config.yml` |
+| Tempo (traces) | 3 days (`block_retention: 72h`) | `telemetry/config/tempo.yaml` |
+| Prometheus (metrics) | 15 days or 5GB, whichever is hit first | `.env`: `PROMETHEUS_RETENTION_TIME` / `PROMETHEUS_RETENTION_SIZE` |
+| Pyroscope (profiles) | Not set by OIB (Pyroscope's own defaults) | — |
+
+See [docs/storage-retention.md](docs/storage-retention.md) for sizing and tuning.
+
+## 💾 Backup and Restore
+
+```bash
+make backup                  # Back up Prometheus, Loki, Tempo and Grafana volumes
+make backup-loki             # Or one component: backup-prometheus/-loki/-tempo/-grafana
+make restore                 # List backups in ./backups and print restore commands
+make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
+```
+
+- Backups are `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (override with `make backup BACKUP_DIR=/path`); `backups/` is git-ignored.
+- They are taken from the live volumes while the services keep running, so they are not guaranteed to be consistent. Run `make stop` first for a clean copy.
+- The Pyroscope volume and the shared-services volumes (PostgreSQL, Redis) are not backed up.
+- `restore-*` asks for confirmation, stops that one service, **deletes the current volume contents**, extracts the archive and starts the service again. `FILE` may be relative or absolute.
 
 ## 💡 Tips
 
-1. **Persist data**: All data is stored in Docker volumes prefixed with `oib-`
-2. **Resource limits**: Adjust memory/CPU limits in docker-compose files for your hardware
-3. **Ports**: Default ports can be changed via environment variables (see `.env.example`)
+1. **Persist data**: Data is stored in named Docker volumes (`oib-grafana-data`, `oib-loki-data`, `oib-prometheus-data`, `oib-tempo-data`, `oib-pyroscope-data`). `make uninstall*` deletes them.
+2. **Resource limits**: Adjust memory/CPU limits in the stacks' `compose.yaml` files for your hardware
+3. **Ports**: Default ports can be changed via environment variables (see `.env.example`), then applied with `make install`
+4. **Known limitations**: see [docs/troubleshooting.md](docs/troubleshooting.md#known-limitations)
 
 ## 🧰 Troubleshooting
 
@@ -496,6 +603,9 @@ lsof -i :3000
 
 # Change ports in .env file
 GRAFANA_PORT=3001
+
+# Apply (recreates the affected containers, keeps data)
+make install
 ```
 </details>
 
@@ -555,8 +665,12 @@ curl http://localhost:3100/ready
 # Check Alloy logging pipeline
 curl http://localhost:12345/metrics | grep loki
 
-# Ensure containers are on oib-network for auto-collection
-docker network inspect oib-network
+# Push a test line and check it is searchable
+make demo
+
+# Alloy reads every container through the Docker socket (no network
+# membership needed); check its log for socket or push errors
+docker logs oib-alloy-logging
 ```
 </details>
 
@@ -567,10 +681,10 @@ docker network inspect oib-network
 # Check container resource usage
 docker stats
 
-# Reduce retention in config files:
-# - logging/config/loki-config.yml: retention_period
-# - telemetry/config/tempo.yaml: block_retention
-# - metrics/compose.yaml: --storage.tsdb.retention.size
+# Reduce retention:
+# - logging/config/loki-config.yml: retention_period (then make restart-logging)
+# - telemetry/config/tempo.yaml: block_retention (then make restart-telemetry)
+# - .env: PROMETHEUS_RETENTION_SIZE / _TIME (then make install-metrics)
 ```
 </details>
 

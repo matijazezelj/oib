@@ -2,7 +2,7 @@ name: oib-profiling
 
 services:
   pyroscope:
-    image: grafana/pyroscope:${PYROSCOPE_VERSION:-1.18.0}
+    image: grafana/pyroscope:${PYROSCOPE_VERSION:-2.4.3}
     container_name: oib-pyroscope
     env_file:
       - ../.env
@@ -15,7 +15,7 @@ services:
     networks:
       - oib-network
     # Note: Pyroscope uses a distroless image with no shell/wget/curl
-    # Health is monitored externally via 'make health' and blackbox probes
+    # Health is monitored externally via 'make health' (no blackbox probe: the stack is optional)
     restart: unless-stopped
     stop_grace_period: 30s
     security_opt:

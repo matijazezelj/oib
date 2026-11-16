@@ -4,8 +4,8 @@ global:
   external_labels:
     monitor: 'oib-monitor'
 
-# Storage retention - adjust based on available disk space
-# Note: Also set via --storage.tsdb.retention.time flag in docker-compose
+# Storage retention is set via the --storage.tsdb.retention.* flags in
+# metrics/compose.yaml (PROMETHEUS_RETENTION_TIME / PROMETHEUS_RETENTION_SIZE).
 
 # Alerting configuration (optional - uncomment to enable)
 # alerting:

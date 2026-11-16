@@ -25,7 +25,8 @@ services:
         reservations:
           memory: 128M
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
+      # ruby:*-slim has no curl; use Ruby's Net::HTTP (same check as the Dockerfile HEALTHCHECK)
+      test: ["CMD", "ruby", "-e", "require 'net/http'; exit(Net::HTTP.get_response(URI('http://127.0.0.1:3000/health')).is_a?(Net::HTTPSuccess) ? 0 : 1)"]
       interval: 30s
       timeout: 10s
       retries: 3

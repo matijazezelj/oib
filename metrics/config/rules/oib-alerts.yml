@@ -140,7 +140,7 @@ groups:
 
       # Container Memory
       - alert: ContainerHighMemoryUsage
-        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 80
+        expr: (container_memory_usage_bytes{name!=""} / (container_spec_memory_limit_bytes{name!=""} > 0)) * 100 > 80
         for: 5m
         labels:
           severity: warning
@@ -149,7 +149,7 @@ groups:
           description: "Container {{ $labels.name }} is using {{ $value | printf \"%.1f\" }}% of its memory limit."
 
       - alert: ContainerMemoryNearLimit
-        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 95
+        expr: (container_memory_usage_bytes{name!=""} / (container_spec_memory_limit_bytes{name!=""} > 0)) * 100 > 95
         for: 2m
         labels:
           severity: critical

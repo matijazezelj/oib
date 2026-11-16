@@ -1,3 +1,5 @@
+stream_over_http_enabled: true
+
 server:
   http_listen_port: 3200
   grpc_listen_port: 9095
@@ -12,25 +14,23 @@ distributor:
         http:
           endpoint: "0.0.0.0:4318"
 
-ingester:
-  trace_idle_period: 10s
-  max_block_bytes: 1_000_000
-  max_block_duration: 5m
+# Tempo 3 monolithic mode (-target=all): the ingester and compactor are gone.
+# Compaction and retention run in-process via the backend scheduler/worker.
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        block_retention: 72h  # 3 days - adjust based on storage
 
-compactor:
+backend_worker:
   compaction:
-    compaction_window: 1h
-    max_block_bytes: 100_000_000
-    block_retention: 72h      # 3 days - adjust based on storage
-    compacted_block_retention: 1h
+    block_retention: 72h      # keep in sync with backend_scheduler above
 
 storage:
   trace:
     backend: local
     block:
       bloom_filter_false_positive: .05
-      v2_index_downsample_bytes: 1000
-      v2_encoding: zstd
     wal:
       path: /var/tempo/wal
     local:

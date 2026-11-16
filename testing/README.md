@@ -4,6 +4,8 @@ Load test your applications with [k6](https://k6.io/) and visualize the results 
 
 ## Quick Start
 
+Needs the metrics stack running (`make install` or `make install-metrics`): k6 remote-writes its results to `http://oib-prometheus:9090/api/v1/write`. The make targets create `oib-network` if it is missing, run k6 in a throwaway `oib-k6` container (`--rm`), and all target Grafana (`http://oib-grafana:3000`) unless the script is pointed elsewhere.
+
 ```bash
 # Run basic load test
 make test-load
@@ -22,10 +24,12 @@ make test-api
 
 | Script | Purpose | Duration | Max VUs |
 |--------|---------|----------|---------|
-| `basic-load.js` | Standard load pattern with stages | ~4 min | 20 |
-| `stress-test.js` | Find system limits | ~13 min | 200 |
-| `spike-test.js` | Sudden traffic spikes | ~5 min | 150 |
+| `basic-load.js` | Standard load pattern with stages | ~3.5 min | 20 |
+| `stress-test.js` | Find system limits | ~14 min | 200 |
+| `spike-test.js` | Sudden traffic spikes | ~4 min | 150 |
 | `api-load.js` | Multi-endpoint API testing | ~2 min | 10 |
+
+The make targets map to scripts as follows: `test-load` → `basic-load.js`, `test-stress` → `stress-test.js`, `test-spike` → `spike-test.js`, `test-api` → `api-load.js`. Scripts live in `testing/scripts/`, mounted read-only at `/scripts`.
 
 ## Custom Tests
 
@@ -42,9 +46,11 @@ docker compose --profile test run --rm \
 
 ```bash
 docker compose --profile test run --rm \
-  -v /path/to/your-script.js:/scripts/custom.js \
-  k6 run /scripts/custom.js
+  -v /path/to/your-script.js:/custom.js:ro \
+  k6 run /custom.js
 ```
+
+Mount it outside `/scripts`: that directory is already a read-only bind mount of `testing/scripts/`. Or simply copy the script into `testing/scripts/`.
 
 ### Run with More Options
 
@@ -53,10 +59,15 @@ docker compose --profile test run --rm \
 docker compose --profile test run --rm \
   k6 run --vus 50 --duration 2m /scripts/basic-load.js
 
-# Run with custom output
+# Write raw results to a JSON file on the host
+mkdir -p results
 docker compose --profile test run --rm \
-  k6 run --out json=output.json /scripts/basic-load.js
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/results:/results" \
+  k6 run --out json=/results/output.json /scripts/basic-load.js
 ```
+
+The container is removed after the run (`--rm`), so files written inside it are lost unless they go to a mounted directory as above. Whether `--out` on the command line replaces or adds to `K6_OUT` from `compose.yaml` (the Prometheus output) was not checked; if the Grafana panels stay empty, pass both: `--out experimental-prometheus-rw --out json=/results/output.json`.
 
 ## Viewing Results
 
@@ -71,8 +82,8 @@ All k6 metrics are automatically sent to Prometheus and visible in Grafana:
 - **Virtual Users (VUs)**: Active concurrent users
 - **Request Rate**: Requests per second
 - **Error Rate**: Percentage of failed requests
-- **HTTP Request Duration**: Latency percentiles (p50, p90, p95, p99)
-- **Timing Breakdown**: Blocked, Connecting, TLS, Sending, Waiting (TTFB), Receiving
+- **HTTP Request Duration**: p99 latency (k6's Prometheus remote-write output only exports `p(99)` for trends unless `K6_PROMETHEUS_RW_TREND_STATS` is set)
+- **Timing Breakdown**: Blocked, Connecting, TLS, Sending, Waiting (TTFB), Receiving (p99)
 
 ## Writing k6 Scripts
 
@@ -106,6 +117,7 @@ export default function () {
 ### Custom Metrics
 
 ```javascript
+import http from 'k6/http';
 import { Rate, Counter, Trend } from 'k6/metrics';
 
 const errorRate = new Rate('custom_errors');
@@ -124,9 +136,20 @@ export default function () {
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TARGET_URL` | `http://oib-grafana:3000` | Target URL to test |
+| `TARGET_URL` | `http://oib-grafana:3000` | Target URL to test (read by all four scripts) |
 | `K6_VUS` | (from script) | Number of virtual users |
 | `K6_DURATION` | (from script) | Test duration |
+
+Pass these with `-e` on `docker compose ... run` (as in [Test a Custom Target](#test-a-custom-target)). The root `.env` is not forwarded into the k6 container, and the make targets do not accept them.
+
+Set in `compose.yaml` (k6 image `grafana/k6:2.4.0`):
+
+| Variable | Value |
+|----------|-------|
+| `K6_OUT` | `experimental-prometheus-rw` |
+| `K6_PROMETHEUS_RW_SERVER_URL` | `http://oib-prometheus:9090/api/v1/write` |
+| `K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM` | `false` |
+| `K6_PROMETHEUS_RW_STALE_MARKERS` | `true` |
 
 ## Network
 
@@ -138,7 +161,8 @@ The k6 container runs on the `oib-network`, so you can test any container in the
 - `http://oib-tempo:3200`
 
 For example apps:
-- `http://oib-example-python:5000`
-- `http://oib-example-node:3000`
-- `http://oib-example-ruby:3000`
-- `http://oib-example-php:80`
+- `http://example-flask-app:5000`
+- `http://example-express-app:3000`
+- `http://example-ruby-rails:3000`
+- `http://example-php-laravel:8000`
+- `http://oib-demo-app:5000`

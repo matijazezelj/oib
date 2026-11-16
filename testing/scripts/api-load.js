@@ -25,19 +25,11 @@ export const options = {
       vus: 10,
       duration: '2m',
     },
-    // Spike test scenario (uncomment to enable)
-    // spike_test: {
-    //   executor: 'ramping-vus',
-    //   startVUs: 0,
-    //   stages: [
-    //     { duration: '10s', target: 50 },
-    //     { duration: '1m', target: 50 },
-    //     { duration: '10s', target: 0 },
-    //   ],
-    //   startTime: '2m30s',
-    // },
   },
-  
+
+  // handleSummary below reads p(99); k6's default summary stats stop at p(95).
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
+
   thresholds: {
     http_req_duration: ['p(95)<1000', 'p(99)<2000'],
     errors: ['rate<0.05'],

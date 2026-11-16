@@ -89,6 +89,22 @@ CACHE_OPS = Counter('app_cache_operations_total', 'Cache operations', ['operatio
 app = Flask(__name__)
 FlaskInstrumentor().instrument_app(app)
 
+
+@app.before_request
+def _start_timer():
+    request.environ["oib.start_time"] = time.perf_counter()
+
+
+@app.after_request
+def _record_request_metrics(response):
+    # Use the route template (e.g. /users/<int:user_id>) to keep label cardinality bounded
+    endpoint = request.url_rule.rule if request.url_rule else "unmatched"
+    start = request.environ.get("oib.start_time")
+    if start is not None:
+        REQUEST_LATENCY.labels(method=request.method, endpoint=endpoint).observe(time.perf_counter() - start)
+    REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, status=str(response.status_code)).inc()
+    return response
+
 # Database connection pool
 def get_db_connection():
     """Get a database connection with retry logic."""
@@ -529,6 +545,7 @@ def error_endpoint():
         span.set_attribute("error.type", error_type)
         
         if error_type == "database":
+            conn = None
             try:
                 conn = get_db_connection()
                 cur = conn.cursor()
@@ -536,6 +553,9 @@ def error_endpoint():
             except Exception as e:
                 span.record_exception(e)
                 return jsonify({"error": "Database error", "details": str(e)}), 500
+            finally:
+                if conn is not None:
+                    conn.close()
         
         elif error_type == "cache":
             return jsonify({"error": "Cache connection failed"}), 503

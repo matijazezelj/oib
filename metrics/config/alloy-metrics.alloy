@@ -42,8 +42,3 @@ prometheus.remote_write "prometheus" {
     url = "http://oib-prometheus:9090/api/v1/write"
   }
 }
-
-// ==================== Self Monitoring ====================
-
-// Expose Alloy's own metrics for Prometheus to scrape
-// This allows health checks and monitoring of Alloy itself
