@@ -24,3 +24,7 @@ temp/
 
 # Backups
 backups/
+
+# Python bytecode
+__pycache__/
+*.pyc
