@@ -5,19 +5,19 @@
         uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
         status info info-grafana info-logging info-metrics info-telemetry info-profiling info-services \
         logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
-        network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling \
+        network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling latest \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api \
         backup backup-prometheus backup-loki backup-tempo backup-grafana \
         restore restore-prometheus restore-loki restore-tempo restore-grafana
 
-# Colors
-CYAN := \033[36m
-GREEN := \033[32m
-YELLOW := \033[33m
-RED := \033[31m
-RESET := \033[0m
-BOLD := \033[1m
+# Colors - real ESC bytes, so plain `echo` renders them under both dash and bash
+CYAN := $(shell printf '\033[36m')
+GREEN := $(shell printf '\033[32m')
+YELLOW := $(shell printf '\033[33m')
+RED := $(shell printf '\033[31m')
+RESET := $(shell printf '\033[0m')
+BOLD := $(shell printf '\033[1m')
 
 # Docker compose command - include root .env file for all stacks
 DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env
@@ -66,9 +66,6 @@ CORE_PORTS := $(GRAFANA_PORT) $(LOKI_PORT) $(ALLOY_LOGGING_PORT) $(PROMETHEUS_PO
 DEBUG ?= 0
 ifeq ($(DEBUG),1)
   DOCKER_COMPOSE += --verbose
-  Q :=
-else
-  Q := @
 endif
 
 # Default target
@@ -88,13 +85,13 @@ help: ## Show this help message
 	@grep -E '^(start|stop|restart|status|info|logs)[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Health & Diagnostics:$(RESET)"
-	@grep -E '^(health|doctor|check-ports|ps|validate):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(preflight|health|doctor|check-ports|ps|validate):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Load Testing:$(RESET)"
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
-	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
 	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -299,7 +296,7 @@ restart-services: ## Restart shared services (PostgreSQL + Redis)
 uninstall: ## Remove all stacks and volumes (with confirmation)
 	@echo "$(RED)$(BOLD)⚠️  WARNING: This will delete ALL data (logs, metrics, traces)!$(RESET)"
 	@echo ""
-	@read -p "Are you sure you want to uninstall? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@printf "Are you sure you want to uninstall? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
 	@$(MAKE) --no-print-directory uninstall-grafana
 	@$(MAKE) --no-print-directory uninstall-logging
 	@$(MAKE) --no-print-directory uninstall-metrics
@@ -493,7 +490,7 @@ info-telemetry: ## Show telemetry integration info
 	@echo "  OTLP HTTP:  $(YELLOW)$(OTEL_HTTP_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Configure your app:$(RESET)"
-	@echo "  $(CYAN)OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:4318$(RESET)"
+	@echo "  $(CYAN)OTEL_EXPORTER_OTLP_ENDPOINT=http://<oib-host>:$(OTEL_HTTP_PORT)$(RESET)"
 	@echo ""
 
 info-profiling: ## Show profiling integration info
@@ -505,10 +502,10 @@ info-profiling: ## Show profiling integration info
 	@echo "  URL:      $(YELLOW)$(PYROSCOPE_URL)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)SDK Integration:$(RESET)"
-	@echo "  Server:   $(YELLOW)http://<oib-host>:4040$(RESET)"
+	@echo "  Server:   $(YELLOW)http://<oib-host>:$(PYROSCOPE_PORT)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Configure your app:$(RESET)"
-	@echo "  $(CYAN)PYROSCOPE_SERVER_ADDRESS=http://<oib-host>:4040$(RESET)"
+	@echo "  $(CYAN)PYROSCOPE_SERVER_ADDRESS=http://<oib-host>:$(PYROSCOPE_PORT)$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Supported Languages:$(RESET)"
 	@echo "  • Go, Python, Java, .NET, Ruby, Node.js, Rust"
@@ -541,7 +538,11 @@ info-services: ## Show shared services info (PostgreSQL + Redis)
 
 logs: ## Tail logs from all stacks
 	@echo "$(CYAN)Tailing all stack logs (Ctrl+C to stop)...$(RESET)"
-	@docker compose --env-file $(CURDIR)/.env -f grafana/compose.yaml -f logging/compose.yaml -f metrics/compose.yaml -f telemetry/compose.yaml logs -f
+	@pids=""; trap 'kill $$pids 2>/dev/null' INT TERM; \
+	for stack in grafana logging metrics telemetry; do \
+		(cd $$stack && exec $(DOCKER_COMPOSE) logs -f) & pids="$$pids $$!"; \
+	done; \
+	wait
 
 logs-grafana: ## Tail Grafana logs
 	@cd grafana && $(DOCKER_COMPOSE) logs -f
@@ -622,7 +623,11 @@ doctor: ## Diagnose common issues (Docker, ports, config)
 	@echo "$(CYAN)Checking configuration...$(RESET)"
 	@test -f .env && echo "  $(GREEN)✓$(RESET) .env file exists" || echo "  $(YELLOW)!$(RESET) .env file missing (copy from .env.example)"
 	@if [ -f .env ]; then \
-		grep -q "CHANGE_ME" .env && echo "  $(YELLOW)!$(RESET) Password not changed in .env (security risk)" || echo "  $(GREEN)✓$(RESET) Password has been customized"; \
+		if ! grep -Eq '^GRAFANA_ADMIN_PASSWORD=.+$$' .env || grep -Eq '^GRAFANA_ADMIN_PASSWORD=CHANGE_ME' .env; then \
+			echo "  $(YELLOW)!$(RESET) GRAFANA_ADMIN_PASSWORD is empty or still a placeholder in .env"; \
+		else \
+			echo "  $(GREEN)✓$(RESET) GRAFANA_ADMIN_PASSWORD is set"; \
+		fi; \
 	fi
 	@echo ""
 	@echo "$(CYAN)Checking network...$(RESET)"
@@ -665,7 +670,7 @@ validate: ## Validate configuration files
 		grafana/provisioning/datasources/datasources.yml \
 		grafana/provisioning/dashboards/dashboards.yml; do \
 		if [ -f "$$file" ]; then \
-			if docker run --rm -v "$(PWD)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1; then \
+			if docker run --rm -v "$(CURDIR)/$$file:/file.yml:ro" mikefarah/yq '.' /file.yml >/dev/null 2>&1; then \
 				echo "  $(GREEN)✓$(RESET) $$file"; \
 			else \
 				echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
@@ -698,7 +703,7 @@ validate: ## Validate configuration files
 	echo ""; \
 	echo "$(CYAN)Checking dashboard JSON...$(RESET)"; \
 	for file in $$(find grafana logging metrics telemetry -path '*/provisioning/dashboards/json/*.json' -type f); do \
-		if docker run --rm -v "$(PWD)/$$file:/file.json:ro" mikefarah/yq '.' /file.json >/dev/null 2>&1; then \
+		if docker run --rm -v "$(CURDIR)/$$file:/file.json:ro" mikefarah/yq '.' /file.json >/dev/null 2>&1; then \
 			echo "  $(GREEN)✓$(RESET) $$file"; \
 		else \
 			echo "  $(RED)✗$(RESET) $$file has syntax errors"; \
@@ -716,15 +721,18 @@ validate: ## Validate configuration files
 
 # ==================== Maintenance ====================
 
-update: ## Pull latest images and restart all stacks
+update: ## Pull pinned images and recreate the core stacks
 	@echo "$(CYAN)Pulling latest images...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) pull
 	@cd logging && $(DOCKER_COMPOSE) pull
 	@cd metrics && $(DOCKER_COMPOSE) pull
 	@cd telemetry && $(DOCKER_COMPOSE) pull
 	@echo ""
-	@echo "$(CYAN)Restarting stacks with new images...$(RESET)"
-	@$(MAKE) --no-print-directory restart
+	@echo "$(CYAN)Recreating stacks with new images...$(RESET)"
+	@cd logging && $(DOCKER_COMPOSE) up -d
+	@cd metrics && $(DOCKER_COMPOSE) up -d
+	@cd telemetry && $(DOCKER_COMPOSE) up -d
+	@cd grafana && $(DOCKER_COMPOSE) up -d
 	@echo ""
 	@echo "$(GREEN)✓ All stacks updated$(RESET)"
 
@@ -791,7 +799,11 @@ latest: ## Pull and run :latest versions of all images
 	@echo "$(CYAN)  Telemetry stack...$(RESET)"
 	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Profiling stack...$(RESET)"
-	@cd profiling && PYROSCOPE_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@if docker inspect oib-pyroscope >/dev/null 2>&1; then \
+		cd profiling && PYROSCOPE_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true; \
+	else \
+		echo "    (not installed, skipped)"; \
+	fi
 	@echo "$(CYAN)  Grafana...$(RESET)"
 	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo ""
@@ -804,7 +816,7 @@ latest: ## Pull and run :latest versions of all images
 	@echo ""
 	@echo "$(YELLOW)Note: To revert to pinned versions, run: make install$(RESET)"
 
-clean: ## Remove unused Docker resources (images, networks, volumes)
+clean: ## Prune unused Docker resources host-wide (stopped containers, networks, dangling images)
 	@echo "$(CYAN)Cleaning up unused Docker resources...$(RESET)"
 	@docker system prune -f
 	@echo "$(GREEN)✓ Cleanup complete$(RESET)"
@@ -1120,7 +1132,7 @@ backup-prometheus: ## Backup Prometheus data
 	@if docker volume inspect oib-prometheus-data >/dev/null 2>&1; then \
 		docker run --rm \
 			-v oib-prometheus-data:/data:ro \
-			-v $(PWD)/$(BACKUP_DIR):/backup \
+			-v "$(abspath $(BACKUP_DIR))":/backup \
 			alpine tar czf /backup/prometheus_$(TIMESTAMP).tar.gz -C /data . && \
 		echo "  $(GREEN)✓$(RESET) Prometheus backup: $(BACKUP_DIR)/prometheus_$(TIMESTAMP).tar.gz"; \
 	else \
@@ -1133,7 +1145,7 @@ backup-loki: ## Backup Loki data
 	@if docker volume inspect oib-loki-data >/dev/null 2>&1; then \
 		docker run --rm \
 			-v oib-loki-data:/data:ro \
-			-v $(PWD)/$(BACKUP_DIR):/backup \
+			-v "$(abspath $(BACKUP_DIR))":/backup \
 			alpine tar czf /backup/loki_$(TIMESTAMP).tar.gz -C /data . && \
 		echo "  $(GREEN)✓$(RESET) Loki backup: $(BACKUP_DIR)/loki_$(TIMESTAMP).tar.gz"; \
 	else \
@@ -1146,7 +1158,7 @@ backup-tempo: ## Backup Tempo data
 	@if docker volume inspect oib-tempo-data >/dev/null 2>&1; then \
 		docker run --rm \
 			-v oib-tempo-data:/data:ro \
-			-v $(PWD)/$(BACKUP_DIR):/backup \
+			-v "$(abspath $(BACKUP_DIR))":/backup \
 			alpine tar czf /backup/tempo_$(TIMESTAMP).tar.gz -C /data . && \
 		echo "  $(GREEN)✓$(RESET) Tempo backup: $(BACKUP_DIR)/tempo_$(TIMESTAMP).tar.gz"; \
 	else \
@@ -1159,7 +1171,7 @@ backup-grafana: ## Backup Grafana data
 	@if docker volume inspect oib-grafana-data >/dev/null 2>&1; then \
 		docker run --rm \
 			-v oib-grafana-data:/data:ro \
-			-v $(PWD)/$(BACKUP_DIR):/backup \
+			-v "$(abspath $(BACKUP_DIR))":/backup \
 			alpine tar czf /backup/grafana_$(TIMESTAMP).tar.gz -C /data . && \
 		echo "  $(GREEN)✓$(RESET) Grafana backup: $(BACKUP_DIR)/grafana_$(TIMESTAMP).tar.gz"; \
 	else \
@@ -1191,13 +1203,13 @@ restore-prometheus: ## Restore Prometheus data (FILE=path/to/backup.tar.gz)
 		exit 1; \
 	fi
 	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Prometheus data!$(RESET)"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
 	@echo "$(CYAN)Stopping Prometheus...$(RESET)"
 	@cd metrics && $(DOCKER_COMPOSE) stop prometheus 2>/dev/null || true
 	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
 	@docker run --rm \
 		-v oib-prometheus-data:/data \
-		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
 		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
 	@echo "$(CYAN)Starting Prometheus...$(RESET)"
 	@cd metrics && $(DOCKER_COMPOSE) start prometheus
@@ -1214,13 +1226,13 @@ restore-loki: ## Restore Loki data (FILE=path/to/backup.tar.gz)
 		exit 1; \
 	fi
 	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Loki data!$(RESET)"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
 	@echo "$(CYAN)Stopping Loki...$(RESET)"
 	@cd logging && $(DOCKER_COMPOSE) stop loki 2>/dev/null || true
 	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
 	@docker run --rm \
 		-v oib-loki-data:/data \
-		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
 		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
 	@echo "$(CYAN)Starting Loki...$(RESET)"
 	@cd logging && $(DOCKER_COMPOSE) start loki
@@ -1237,13 +1249,13 @@ restore-tempo: ## Restore Tempo data (FILE=path/to/backup.tar.gz)
 		exit 1; \
 	fi
 	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Tempo data!$(RESET)"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
 	@echo "$(CYAN)Stopping Tempo...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) stop tempo 2>/dev/null || true
 	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
 	@docker run --rm \
 		-v oib-tempo-data:/data \
-		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
 		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
 	@echo "$(CYAN)Starting Tempo...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) start tempo
@@ -1260,13 +1272,13 @@ restore-grafana: ## Restore Grafana data (FILE=path/to/backup.tar.gz)
 		exit 1; \
 	fi
 	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Grafana data!$(RESET)"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || (echo "Cancelled." && exit 1)
+	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
 	@echo "$(CYAN)Stopping Grafana...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) stop grafana 2>/dev/null || true
 	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
 	@docker run --rm \
 		-v oib-grafana-data:/data \
-		-v $(PWD)/$(FILE):/backup.tar.gz:ro \
+		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
 		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
 	@echo "$(CYAN)Starting Grafana...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) start grafana

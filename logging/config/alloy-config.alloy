@@ -13,7 +13,6 @@ discovery.docker "containers" {
 discovery.relabel "docker" {
   targets = discovery.docker.containers.targets
 
-  // Keep only running containers
   rule {
     source_labels = ["__meta_docker_container_id"]
     target_label  = "container_id"
@@ -38,13 +37,6 @@ discovery.relabel "docker" {
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "compose_service"
-  }
-
-  // Set the log path
-  rule {
-    source_labels = ["__meta_docker_container_id"]
-    target_label  = "__path__"
-    replacement   = "/var/lib/docker/containers/$1/$1-json.log"
   }
 }
 

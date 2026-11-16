@@ -47,18 +47,16 @@ limits_config:
   allow_structured_metadata: true
   retention_period: 168h  # 7 days - adjust based on storage
 
-# Table manager for retention enforcement
-table_manager:
-  retention_deletes_enabled: true
-  retention_period: 168h  # 7 days
-
 storage_config:
   tsdb_shipper:
     active_index_directory: /loki/tsdb-index
     cache_location: /loki/tsdb-cache
 
+# The compactor enforces limits_config.retention_period (TSDB store)
 compactor:
   working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
 
 analytics:
   reporting_enabled: false

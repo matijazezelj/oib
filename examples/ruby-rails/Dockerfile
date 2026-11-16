@@ -13,7 +13,9 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Copy Gemfile first for layer caching
 COPY Gemfile Gemfile.lock* ./
-RUN bundle install --without development test
+# BUNDLE_WITHOUT replaces the deprecated `bundle install --without` flag
+ENV BUNDLE_WITHOUT="development:test"
+RUN bundle install
 
 # Copy application code
 COPY . .

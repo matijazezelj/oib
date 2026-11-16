@@ -1,17 +1,18 @@
 # Example: Instrumented Python Flask App
 # 
 # This example shows how to integrate a Python Flask app with all OIB stacks:
-# - Logs -> Loki (via structlog + HTTP)
+# - Logs -> Loki (structlog JSON on stdout, collected by Alloy)
 # - Metrics -> Prometheus (via prometheus_client)
 # - Traces -> Tempo (via OpenTelemetry)
 #
 # Install dependencies:
 #   pip install flask prometheus-client opentelemetry-api opentelemetry-sdk \
 #               opentelemetry-exporter-otlp opentelemetry-instrumentation-flask \
-#               structlog requests
+#               structlog
 
 import logging
 import random
+import sys
 import time
 
 from flask import Flask, jsonify
@@ -50,11 +51,26 @@ trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
 # ==================== Logging Setup ====================
+# structlog renders through the stdlib logger, so stdlib must be configured:
+# without this the root level is WARNING and filter_by_level drops info events.
+logging.basicConfig(format="%(message)s", stream=sys.stdout, level=logging.INFO)
+
+
+def add_trace_context(_logger, _method, event_dict):
+    """Add the current trace/span IDs so logs can be correlated with traces."""
+    ctx = trace.get_current_span().get_span_context()
+    if ctx.is_valid:
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
+    return event_dict
+
+
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
+        add_trace_context,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,

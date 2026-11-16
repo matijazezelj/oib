@@ -15,28 +15,10 @@ const client = require('prom-client');
 const pino = require('pino');
 
 // ==================== Logging Setup ====================
-const logger = pino({
-  level: 'info',
-  transport: {
-    targets: [
-      // Console output
-      {
-        target: 'pino-pretty',
-        options: { colorize: true },
-        level: 'info',
-      },
-      // Loki transport (optional - uncomment if using pino-loki)
-      // {
-      //   target: 'pino-loki',
-      //   options: {
-      //     host: 'http://localhost:3100',
-      //     labels: { app: 'example-express-app' },
-      //   },
-      //   level: 'info',
-      // },
-    ],
-  },
-});
+// Plain JSON to stdout: Alloy collects container stdout and ships it to Loki.
+// The OpenTelemetry pino instrumentation (part of auto-instrumentations-node,
+// enabled in tracing.js) adds trace_id/span_id to log records inside a span.
+const logger = pino({ level: 'info' });
 
 // ==================== Metrics Setup ====================
 const register = new client.Registry();

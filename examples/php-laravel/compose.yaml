@@ -24,7 +24,8 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/health || exit 1"]
+      # Same check as the Dockerfile HEALTHCHECK; does not depend on curl being in the image
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/health') !== false ? 0 : 1);"]
       interval: 30s
       timeout: 10s
       retries: 3

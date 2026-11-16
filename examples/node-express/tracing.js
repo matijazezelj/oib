@@ -19,7 +19,8 @@ const grpc = require('@grpc/grpc-js');
 // Enable OTEL diagnostics
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
-const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'localhost:4317';
+// Accept both "host:port" and "http(s)://host:port" (the standard OTEL env var form)
+const otelEndpoint = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'localhost:4317').replace(/^https?:\/\//, '');
 console.log(`[tracing] OTEL Endpoint: ${otelEndpoint}`);
 console.log(`[tracing] Service Name: ${process.env.OTEL_SERVICE_NAME || 'example-express-app'}`);
 

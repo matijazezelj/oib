@@ -19,7 +19,7 @@ services:
       - REDIS_HOST=oib-redis
       - REDIS_PORT=6379
     ports:
-      - "127.0.0.1:${DEMO_APP_PORT:-5000}:5000"
+      - "${DEMO_BIND_ADDR:-127.0.0.1}:${DEMO_APP_PORT:-5000}:5000"
     networks:
       - oib-network
     depends_on:

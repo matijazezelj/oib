@@ -1,7 +1,8 @@
 #compdef make
 
 # OIB Makefile completions for zsh
-# Install: cp completions/_oib ~/.zsh/completions/_oib && autoload -Uz compinit && compinit
+# Install: put this file on $fpath as _oib (NOT _make: the fallback below calls
+# the stock _make) and run compinit. See completions/README.md.
 
 _oib_targets() {
     local targets
@@ -13,7 +14,10 @@ _oib_targets() {
         'install-metrics:Install metrics stack (Prometheus + exporters)'
         'install-telemetry:Install telemetry stack (Tempo + Alloy)'
         'install-profiling:Install profiling stack (Pyroscope)'
-        
+        'install-services:Install shared services (PostgreSQL + Redis)'
+        'preflight:Check prerequisites and port conflicts'
+        'network:Create shared Docker network'
+
         # Management
         'start:Start all stacks'
         'stop:Stop all stacks'
@@ -43,7 +47,17 @@ _oib_targets() {
         'stop-profiling:Stop profiling stack'
         'restart-profiling:Restart profiling stack'
         'logs-profiling:Tail profiling stack logs'
-        
+        'start-services:Start shared services'
+        'stop-services:Stop shared services'
+        'restart-services:Restart shared services'
+        'logs-services:Tail shared services logs'
+        'info-grafana:Show Grafana info'
+        'info-logging:Show logging integration info'
+        'info-metrics:Show metrics integration info'
+        'info-telemetry:Show telemetry integration info'
+        'info-profiling:Show profiling integration info'
+        'info-services:Show shared services info'
+
         # Health & Diagnostics
         'health:Quick health check of all services'
         'doctor:Diagnose common issues'
@@ -54,8 +68,25 @@ _oib_targets() {
         # Demo & Testing
         'demo:Generate demo data (logs, metrics, traces)'
         'demo-app:Start the demo application'
+        'demo-app-stop:Stop the demo application'
         'demo-traffic:Generate traffic to demo app'
-        'test-load:Run k6 load test'
+        'demo-examples:Run example apps and generate traffic'
+        'test-load:Run k6 basic load test'
+        'test-stress:Run k6 stress test'
+        'test-spike:Run k6 spike test'
+        'test-api:Run k6 API load test'
+
+        # Backup & Restore
+        'backup:Backup all OIB data volumes'
+        'backup-prometheus:Backup Prometheus data'
+        'backup-loki:Backup Loki data'
+        'backup-tempo:Backup Tempo data'
+        'backup-grafana:Backup Grafana data'
+        'restore:List backups and restore usage'
+        'restore-prometheus:Restore Prometheus data (FILE=...)'
+        'restore-loki:Restore Loki data (FILE=...)'
+        'restore-tempo:Restore Tempo data (FILE=...)'
+        'restore-grafana:Restore Grafana data (FILE=...)'
         
         # Utilities
         'open:Open Grafana in browser'
@@ -64,7 +95,7 @@ _oib_targets() {
         'bootstrap:One-command setup (install + demo + open)'
         
         # Maintenance
-        'update:Pull latest images and restart'
+        'update:Pull pinned images and recreate core stacks'
         'update-grafana:Update Grafana'
         'update-logging:Update logging stack'
         'update-metrics:Update metrics stack'
@@ -80,7 +111,8 @@ _oib_targets() {
         'uninstall-metrics:Remove metrics stack'
         'uninstall-telemetry:Remove telemetry stack'
         'uninstall-profiling:Remove profiling stack'
-        
+        'uninstall-services:Remove shared services and volumes'
+
         # Help
         'help:Show help message'
     )
