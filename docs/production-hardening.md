@@ -238,7 +238,12 @@ limits_config:
 
 **Tempo** (`telemetry/config/tempo.yaml`):
 ```yaml
-compactor:
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        block_retention: 72h  # 3 days, adjust as needed
+backend_worker:
   compaction:
     block_retention: 72h  # 3 days, adjust as needed
 ```

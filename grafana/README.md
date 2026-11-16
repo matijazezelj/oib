@@ -55,7 +55,7 @@ The `provisioning/` directory is mounted read-only at `/etc/grafana/provisioning
 | `GRAFANA_ADMIN_PASSWORD` | (required) | Admin password |
 | `BIND_ADDR` | `127.0.0.1` | Host address the web UI is published on. Set `0.0.0.0` only to expose Grafana on your LAN |
 | `GRAFANA_PORT` | `3000` | Web UI port (also used in `GF_SERVER_ROOT_URL=http://localhost:<port>`) |
-| `GRAFANA_VERSION` | `12.3.2` | Grafana image tag |
+| `GRAFANA_VERSION` | `13.3.1` | Grafana image tag |
 
 ## Pre-built Dashboards
 
@@ -101,7 +101,7 @@ Pre-configured datasources (all `editable: false`; change them in `datasources.y
 The Pyroscope datasource is always provisioned, but it only works after `make install-profiling`. Until then, queries against it fail.
 
 The Tempo datasource is linked to the others:
-- **Trace to logs** (Loki): filters by trace ID. It also maps the span attribute `service.name` to the Loki label `service_name`, but the logging pipeline does not set a `service_name` label (it sets `container_name`, `compose_service`, …). Whether Loki derives one on its own was not verified, so this link may return no logs.
+- **Trace to logs** (Loki): filters by trace ID. It also maps the span attribute `service.name` to the Loki label `service_name`, which Loki derives from the container name (e.g. `oib-grafana`). The link only finds logs when an app's `OTEL_SERVICE_NAME` equals its container name; the bundled examples use different names, so for them it returns nothing.
 - **Trace to profiles** (Pyroscope): uses `service.name` → `service_name` and the CPU profile type.
 - **Service graph** (Prometheus): Tempo's metrics generator runs, but `telemetry/config/tempo.yaml` has `remote_write: []`, so no service-graph series reach Prometheus and the Service Graph view in Explore stays empty.
 

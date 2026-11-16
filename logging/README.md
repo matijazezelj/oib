@@ -73,8 +73,8 @@ Example query: `{container_name="oib-grafana"} |= "error"`.
 |----------|---------|-------------|
 | `LOKI_PORT` | `3100` | Loki API port |
 | `ALLOY_LOGGING_PORT` | `12345` | Alloy UI port |
-| `LOKI_VERSION` | `3.6.5` | Loki image tag |
-| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
+| `LOKI_VERSION` | `3.7.10` | Loki image tag |
+| `ALLOY_VERSION` | `v1.22.0` | Alloy image tag |
 
 ## Sending Logs
 

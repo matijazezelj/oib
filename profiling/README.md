@@ -28,7 +28,7 @@ make install-profiling
 # install-profiling recommends restarting Grafana afterwards
 make restart-grafana
 
-# Check status
+# Check status (Pyroscope 2 reports ready about a minute after start)
 make status
 
 # Show the endpoints to configure in your app
@@ -55,7 +55,7 @@ Pyroscope is an optional stack, so the all-stack targets leave it alone:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PYROSCOPE_PORT` | `4040` | Pyroscope UI/API port |
-| `PYROSCOPE_VERSION` | `1.18.0` | Pyroscope image tag |
+| `PYROSCOPE_VERSION` | `2.4.3` | Pyroscope image tag |
 
 ## Sending Profiles
 
@@ -194,4 +194,4 @@ To see which applications are sending profiles, open the Pyroscope UI at http://
 
 ## Data Retention
 
-`compose.yaml` runs Pyroscope with only the `server` argument and no retention settings, so Pyroscope's built-in defaults apply. Check the [Pyroscope configuration reference](https://grafana.com/docs/pyroscope/latest/configure-server/) for the retention options of the version you run (`PYROSCOPE_VERSION`, default `1.18.0`) and add them to the `command:` list. An unknown flag stops Pyroscope from starting, so check `make logs-profiling` after the change.
+`compose.yaml` runs Pyroscope with only the `server` argument and no retention settings, so Pyroscope's built-in defaults apply. Check the [Pyroscope configuration reference](https://grafana.com/docs/pyroscope/latest/configure-server/) for the retention options of the version you run (`PYROSCOPE_VERSION`, default `2.4.3`) and add them to the `command:` list. An unknown flag stops Pyroscope from starting, so check `make logs-profiling` after the change.

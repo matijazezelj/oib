@@ -2,7 +2,7 @@ name: oib-testing
 
 services:
   k6:
-    image: grafana/k6:0.48.0
+    image: grafana/k6:2.4.0
     container_name: oib-k6
     volumes:
       - ./scripts:/scripts:ro

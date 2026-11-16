@@ -51,7 +51,7 @@ make logs-telemetry
 
 ### Tempo Configuration
 Edit `config/tempo.yaml`:
-- `compactor.compaction.block_retention`: How long to keep traces (default: 72h = 3 days)
+- `backend_scheduler.provider.compaction.compaction.block_retention` and `backend_worker.compaction.block_retention`: How long to keep traces (default: 72h = 3 days). Tempo 3 has no `compactor` block; set both to the same value.
 
 Retention is set only in this file; there is no environment variable for it. Apply changes with `make restart-telemetry`.
 
@@ -73,8 +73,8 @@ Edit `config/alloy-config.alloy`:
 | `OTEL_GRPC_PORT` | `4317` | OTLP gRPC receiver port |
 | `OTEL_HTTP_PORT` | `4318` | OTLP HTTP receiver port |
 | `ALLOY_TELEMETRY_PORT` | `12346` | Alloy UI port |
-| `TEMPO_VERSION` | `2.10.0` | Tempo image tag |
-| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
+| `TEMPO_VERSION` | `3.1.1` | Tempo image tag |
+| `ALLOY_VERSION` | `v1.22.0` | Alloy image tag |
 
 ## Sending Traces
 

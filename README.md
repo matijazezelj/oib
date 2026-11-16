@@ -217,15 +217,15 @@ By default, OIB uses pinned (stable) versions for all images. You can override t
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRAFANA_VERSION` | `12.3.2` | Grafana image tag |
-| `LOKI_VERSION` | `3.6.5` | Loki image tag |
-| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
-| `PROMETHEUS_VERSION` | `v3.9.1` | Prometheus image tag |
-| `CADVISOR_VERSION` | `v0.52.1` | cAdvisor image tag |
-| `BLACKBOX_VERSION` | `v0.28.0` | Blackbox Exporter image tag |
-| `TEMPO_VERSION` | `2.10.0` | Tempo image tag |
-| `PYROSCOPE_VERSION` | `1.18.0` | Pyroscope image tag |
-| `PUSHGATEWAY_VERSION` | `v1.6.2` | Pushgateway image tag (optional profile) |
+| `GRAFANA_VERSION` | `13.3.1` | Grafana image tag |
+| `LOKI_VERSION` | `3.7.10` | Loki image tag |
+| `ALLOY_VERSION` | `v1.22.0` | Alloy image tag |
+| `PROMETHEUS_VERSION` | `v3.16.0` | Prometheus image tag |
+| `CADVISOR_VERSION` | `v0.60.6` | cAdvisor image tag |
+| `BLACKBOX_VERSION` | `v0.29.1` | Blackbox Exporter image tag |
+| `TEMPO_VERSION` | `3.1.1` | Tempo image tag |
+| `PYROSCOPE_VERSION` | `2.4.3` | Pyroscope image tag |
+| `PUSHGATEWAY_VERSION` | `v1.11.4` | Pushgateway image tag (optional profile) |
 
 **Quick commands:**
 ```bash

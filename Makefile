@@ -785,7 +785,7 @@ latest: ## Pull and run :latest versions of all images
 	@echo "$(CYAN)Blackbox Exporter:$(RESET)"
 	@docker pull prom/blackbox-exporter:latest
 	@echo "$(CYAN)cAdvisor:$(RESET)"
-	@docker pull gcr.io/cadvisor/cadvisor:latest
+	@docker pull ghcr.io/google/cadvisor:latest
 	@echo "$(CYAN)Tempo:$(RESET)"
 	@docker pull grafana/tempo:latest
 	@echo "$(CYAN)Pyroscope:$(RESET)"

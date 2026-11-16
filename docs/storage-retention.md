@@ -102,7 +102,12 @@ make restart-logging
 
 Edit `telemetry/config/tempo.yaml`:
 ```yaml
-compactor:
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        block_retention: 168h  # 7 days
+backend_worker:
   compaction:
     block_retention: 168h  # 7 days
 ```

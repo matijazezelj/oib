@@ -142,7 +142,7 @@ export default function () {
 
 Pass these with `-e` on `docker compose ... run` (as in [Test a Custom Target](#test-a-custom-target)). The root `.env` is not forwarded into the k6 container, and the make targets do not accept them.
 
-Set in `compose.yaml` (k6 image `grafana/k6:0.48.0`):
+Set in `compose.yaml` (k6 image `grafana/k6:2.4.0`):
 
 | Variable | Value |
 |----------|-------|

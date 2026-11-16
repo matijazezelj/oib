@@ -69,12 +69,12 @@ Prometheus keeps data for `PROMETHEUS_RETENTION_TIME` or until it reaches `PROME
 | `BLACKBOX_PORT` | `9115` | Blackbox Exporter port |
 | `PROMETHEUS_RETENTION_TIME` | `15d` | Data retention time |
 | `PROMETHEUS_RETENTION_SIZE` | `5GB` | Max storage size |
-| `PROMETHEUS_VERSION` | `v3.9.1` | Prometheus image tag |
-| `ALLOY_VERSION` | `v1.13.0` | Alloy image tag |
-| `CADVISOR_VERSION` | `v0.52.1` | cAdvisor image tag |
-| `BLACKBOX_VERSION` | `v0.28.0` | Blackbox image tag |
+| `PROMETHEUS_VERSION` | `v3.16.0` | Prometheus image tag |
+| `ALLOY_VERSION` | `v1.22.0` | Alloy image tag |
+| `CADVISOR_VERSION` | `v0.60.6` | cAdvisor image tag |
+| `BLACKBOX_VERSION` | `v0.29.1` | Blackbox image tag |
 | `PUSHGATEWAY_PORT` | `9091` | Pushgateway port (optional profile) |
-| `PUSHGATEWAY_VERSION` | `v1.6.2` | Pushgateway image tag (optional profile) |
+| `PUSHGATEWAY_VERSION` | `v1.11.4` | Pushgateway image tag (optional profile) |
 
 ## Scrape Jobs
 
