@@ -20,11 +20,11 @@ Run Prometheus, Loki, Tempo, Alloy, Grafana, and optional Pyroscope in Docker wi
 ```bash
 # Clone and configure
 git clone https://github.com/matijazezelj/oib.git && cd oib
-cp .env.example .env  # Edit and set GRAFANA_ADMIN_PASSWORD
+cp .env.example .env  # Edit and set GRAFANA_ADMIN_PASSWORD (empty by default)
 
 # Install and explore
 make install
-make demo
+make demo    # Sends a test log line and trace, checks both are searchable
 make open
 ```
 
@@ -53,22 +53,26 @@ Once installed, your applications can send data to:
 |-----------|----------|----------|
 | **Traces** | `localhost:4317` | OTLP gRPC |
 | **Traces** | `http://localhost:4318` | OTLP HTTP |
-| **Profiles** | `http://localhost:4040` | Pyroscope SDK (optional) |
-| **Logs** | Automatic | Docker containers are auto-collected |
+| **Profiles** | `http://localhost:4040` | Pyroscope SDK (optional, localhost only) |
+| **Logs** | Automatic | Every container on the host is collected through the Docker socket |
+| **Logs** | `http://localhost:3100/loki/api/v1/push` | Loki push API |
+| **Metrics** | Static scrape jobs in `metrics/config/prometheus.yml` | Prometheus scrape |
+
+Containers on `oib-network` use `oib-alloy-telemetry:4317` / `http://oib-alloy-telemetry:4318` for traces and `oib-pyroscope:4040` for profiles. OTLP listens on `127.0.0.1` unless `OTEL_BIND_ADDR=0.0.0.0` is set in `.env`.
 
 ---
 
 ## 📊 Pre-built Dashboards
 
-OIB comes with seven ready-to-use Grafana dashboards:
+OIB comes with seven ready-to-use Grafana dashboards in the **OIB** folder, provisioned with Prometheus, Loki, Tempo and Pyroscope datasources:
 
 - **System Overview** — Container CPU/memory, disk usage, network I/O
 - **Host Metrics** — Detailed host system metrics (CPU, memory, disk, network) via Alloy
 - **Logs Explorer** — Log volume, live logs, errors/warnings panel
 - **Traces Explorer** — TraceQL examples with code samples for Python, Node.js, Ruby, and PHP
-- **Profiles Explorer** — CPU, memory, and goroutine profiling with Pyroscope
+- **Profiles Explorer** — Pyroscope setup guidance and per-language examples (text panels; view profiles in Explore → Pyroscope after `make install-profiling`)
 - **Request Latency** — Endpoint probing results and k6 load test metrics
-- **Stack Health** — Health and ingestion status for the OIB components
+- **Stack Health** — Grafana's home dashboard: health and ingestion status for the OIB components, scrape targets and alerts
 
 ---
 
@@ -173,27 +177,36 @@ The whole thing runs in Docker. The default configuration is designed for local 
 
 ```bash
 # Installation
-make install              # Install all stacks
+make install              # Install all core stacks (logging, metrics, telemetry, Grafana)
 make install-logging      # Install logging stack only
 make install-metrics      # Install metrics stack only
 make install-telemetry    # Install telemetry stack only
+make install-grafana      # Install Grafana only
+make install-profiling    # Install Pyroscope (optional)
+make install-services     # Install PostgreSQL + Redis (optional)
 
 # Health & Status
 make health               # Quick health check
 make status               # Show all services
 make doctor               # Diagnose common issues
+make validate             # Validate configs, compose files and dashboards
 
 # Demo & Testing
-make demo                 # Generate sample data
+make demo                 # Send a test log line and trace
 make demo-app             # Start demo app with PostgreSQL & Redis
+make demo-traffic         # Generate traffic to the demo app
 make test-load            # Run k6 load test
 
 # Maintenance
-make update               # Pull latest images and restart
-make latest               # Run with :latest image tags
-make logs                 # Tail all logs
-make uninstall            # Remove everything
+make update               # Pull pinned images and recreate the core stacks
+make latest               # Run with :latest image tags (make install reverts)
+make logs                 # Tail logs from all core stacks
+make backup               # Back up Prometheus, Loki, Tempo and Grafana volumes
+make clean                # docker system prune -f for the whole Docker host
+make uninstall            # Remove core stacks and their data volumes
 ```
+
+`make help` lists every target. `start`, `stop`, `restart`, `update`, `logs` and `uninstall` cover the core stacks only; the optional stacks have their own `-profiling` and `-services` targets. Shell completion for the targets is in [`completions/`](https://github.com/matijazezelj/oib/tree/main/completions).
 
 ---
 
@@ -242,7 +255,7 @@ sdk.start();
 services:
   my-app:
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
       - OTEL_SERVICE_NAME=my-app
     networks:
       - oib-network
@@ -303,6 +316,8 @@ networks:
     external: true
 ```
 
+The `.Task.Slot` placeholder is a Docker Swarm template (`docker stack deploy`); plain `docker compose` passes it through literally. With Compose, set `service.instance.id` some other way (for example from the container hostname in your app), or leave it out.
+
 ### Scale with Docker Compose
 
 ```bash
@@ -327,13 +342,12 @@ With multiple instances, OIB gives you:
 ```
 
 **Metrics** — Per-instance breakdown:
-- CPU/memory usage per container instance
-- Request rate per instance
-- Error rate distribution across instances
+- CPU/memory usage per container instance (cAdvisor, automatic)
+- Request rate and error rate per instance, once you add a scrape job for your app's `/metrics` endpoint in `metrics/config/prometheus.yml` (OIB has no automatic discovery of app metrics)
 
-**Logs** — Correlated by trace ID:
+**Logs** — Correlated by trace ID, if your app writes `trace_id` into its JSON logs. Alloy labels container logs with `compose_service`, `compose_project` and `container_name`:
 ```logql
-{service_name="api"} | json | trace_id="abc123"
+{compose_service="api"} | json | trace_id="abc123"
 ```
 
 ### Querying Across Instances
@@ -354,7 +368,7 @@ histogram_quantile(0.95,
 
 **Aggregate logs from all instances:**
 ```logql
-{service_name="api"} | json | level="error" | line_format "{{.instance}}: {{.message}}"
+{compose_service="api"} | json | level="error" | line_format "{{.container_name}}: {{.message}}"
 ```
 
 ---

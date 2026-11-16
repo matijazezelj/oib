@@ -6,10 +6,13 @@ Understanding and tuning storage for OIB components.
 
 | Component | Default Retention | Config Location |
 |-----------|------------------|-----------------|
-| Prometheus | 15 days OR 5GB | `.env` |
-| Loki | 7 days (168h) | `logging/config/loki-config.yml` |
+| Prometheus | 15 days OR 5GB | `.env` (`PROMETHEUS_RETENTION_TIME`, `PROMETHEUS_RETENTION_SIZE`) |
+| Loki | 7 days (168h), deleted by the compactor | `logging/config/loki-config.yml` |
 | Tempo | 3 days (72h) | `telemetry/config/tempo.yaml` |
+| Pyroscope (optional) | Not set by OIB | N/A |
 | Grafana | Unlimited | N/A (settings only) |
+
+Data lives in the named volumes `oib-prometheus-data`, `oib-loki-data`, `oib-tempo-data`, `oib-grafana-data` and, if installed, `oib-pyroscope-data`.
 
 ---
 
@@ -17,7 +20,7 @@ Understanding and tuning storage for OIB components.
 
 ### Prometheus
 
-**Formula:** `storage = series_count × scrape_interval × retention × 2 bytes`
+**Formula:** `storage ≈ series_count × (retention ÷ scrape_interval) × ~2 bytes per sample` (OIB's global `scrape_interval` is 15s)
 
 | Scenario | Series | Retention | Estimated Storage |
 |----------|--------|-----------|-------------------|
@@ -67,23 +70,28 @@ PROMETHEUS_RETENTION_TIME=30d
 PROMETHEUS_RETENTION_SIZE=10GB
 ```
 
-Restart to apply:
+Recreate Prometheus to apply (the values are command-line flags, so `make restart-metrics` is not enough; data is kept):
 ```bash
-make restart-metrics
+make install-metrics
 ```
 
 ### Loki
 
-Edit `logging/config/loki-config.yml`:
+Retention is already enforced: the shipped config enables it in the compactor. To change the period, edit `retention_period` in `logging/config/loki-config.yml`:
 ```yaml
 limits_config:
   retention_period: 336h  # 14 days
 
+# Already present in the shipped config; keep it, retention_period does nothing without it
 compactor:
+  working_directory: /loki/compactor
   retention_enabled: true
-  retention_delete_delay: 2h
-  retention_delete_worker_count: 150
+  delete_request_store: filesystem
 ```
+
+**Upgrading an existing install:** older OIB versions set `retention_period` without enabling the compactor, so nothing was ever deleted. After updating, the first compaction deletes all logs older than `retention_period`. Run `make backup-loki` first, or raise `retention_period`, if you want to keep them.
+
+`reject_old_samples_max_age: 168h` in the same file is unrelated to retention: it rejects incoming log lines older than 7 days.
 
 Restart to apply:
 ```bash
@@ -153,15 +161,19 @@ The "OIB Stack Health" dashboard shows:
 
 ### Loki
 
-1. **Filter logs at source:**
+1. **Filter logs at source:** add a `stage.drop` to the existing `loki.process "docker"` block in `logging/config/alloy-config.alloy`, then `make restart-logging`:
    ```
-   # In alloy-config.alloy
-   loki.process "filter" {
+   loki.process "docker" {
+     forward_to = [loki.write.loki.receiver]
+
      stage.drop {
        expression = "healthcheck|readiness"
      }
+
+     // ... existing stages ...
    }
    ```
+   Every container on the host is collected by default, so dropping noisy containers (with a `discovery.relabel` rule) is often the biggest saving.
 
 2. **Increase chunk size** for better compression:
    ```yaml
@@ -172,13 +184,20 @@ The "OIB Stack Health" dashboard shows:
 
 ### Tempo
 
-1. **Implement sampling:**
+1. **Implement sampling:** in `telemetry/config/alloy-config.alloy`, add a sampler and point the receiver's `output` at it instead of the batch processor, then `make restart-telemetry`:
    ```
-   # In alloy-config.alloy
    otelcol.processor.probabilistic_sampler "sampler" {
-     sampling_percentage = 10  # Keep 10% of traces
+     sampling_percentage = 10  // Keep 10% of traces
+
+     output {
+       traces = [otelcol.processor.batch.default.input]
+     }
    }
+
+   // in otelcol.receiver.otlp "default":
+   //   output { traces = [otelcol.processor.probabilistic_sampler.sampler.input] }
    ```
+   With sampling on, `make demo` (and `make bootstrap`) usually fail, because their single test trace is dropped.
 
 2. **Reduce span attributes:**
    Drop large or unnecessary attributes at ingestion
@@ -200,15 +219,22 @@ make backup-tempo
 make backup-grafana
 ```
 
+What `make backup` does and does not do:
+- Writes `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (use `make backup BACKUP_DIR=/path` for another directory). A component whose volume does not exist is skipped.
+- Copies the volumes while the services keep running, so a backup is not guaranteed to be consistent. Run `make stop` before backing up if you need a clean copy, then `make start`.
+- Does not cover `oib-pyroscope-data` or the shared-services PostgreSQL/Redis volumes.
+
 ### Restore from Backup
 
 ```bash
-# List available backups
-ls -la backups/
+# List available backups and the restore commands
+make restore
 
-# Restore specific component
+# Restore specific component (relative or absolute path)
 make restore-prometheus FILE=./backups/prometheus_20240101_120000.tar.gz
 ```
+
+Each `restore-*` target asks for confirmation, stops that service, deletes the current contents of its volume, extracts the archive and starts the service again. Targets: `restore-prometheus`, `restore-loki`, `restore-tempo`, `restore-grafana`.
 
 ### Backup Schedule Recommendations
 
@@ -239,18 +265,20 @@ volumes:
 
 ### Volume Cleanup
 
-To completely reset storage:
+To completely reset storage (`docker volume rm` fails while the containers exist, even stopped, so remove the stacks instead):
 
 ```bash
-# Stop services
-make stop
+# Remove core stacks and their volumes (WARNING: deletes all data, asks for confirmation)
+make uninstall
 
-# Remove volumes (WARNING: deletes all data)
-docker volume rm oib-prometheus-data oib-loki-data oib-tempo-data
+# Or reset a single stack, e.g. metrics only
+make uninstall-metrics
 
 # Reinstall
 make install
 ```
+
+Pyroscope and the shared services are not touched by `make uninstall`; use `make uninstall-profiling` / `make uninstall-services`.
 
 ---
 
@@ -266,9 +294,10 @@ make install
 
 2. Clean up:
    ```bash
-   make clean
-   docker system prune -a --volumes  # CAREFUL: removes unused volumes
+   make clean                         # docker system prune -f for the WHOLE host (not only OIB); keeps volumes
+   docker system prune -a --volumes   # CAREFUL: also removes all unused images and unused volumes host-wide
    ```
+   Neither command shrinks OIB's own data volumes while OIB is installed; reduce retention for that.
 
 3. Reduce retention and restart
 
@@ -290,14 +319,13 @@ make install
 
 If a volume becomes corrupted:
 
-1. Stop the affected service
-2. Restore from backup:
+1. Restore from backup (the target stops and restarts the service itself):
    ```bash
-   make restore-prometheus FILE=./backups/prometheus_latest.tar.gz
+   make restore-prometheus FILE=./backups/prometheus_YYYYMMDD_HHMMSS.tar.gz
    ```
-3. If no backup, recreate the volume:
+2. If no backup, recreate the stack and its volume (deletes that stack's data):
    ```bash
-   docker volume rm oib-prometheus-data
+   make uninstall-metrics
    make install-metrics
    ```
 
@@ -309,9 +337,9 @@ If a volume becomes corrupted:
 
 | Component | Quick Change |
 |-----------|-------------|
-| Prometheus | Edit `.env`: `PROMETHEUS_RETENTION_TIME=30d` |
-| Loki | Edit `logging/config/loki-config.yml`: `retention_period: 336h` |
-| Tempo | Edit `telemetry/config/tempo.yaml`: `block_retention: 168h` |
+| Prometheus | Edit `.env`: `PROMETHEUS_RETENTION_TIME=30d`, then `make install-metrics` |
+| Loki | Edit `logging/config/loki-config.yml`: `retention_period: 336h`, then `make restart-logging` |
+| Tempo | Edit `telemetry/config/tempo.yaml`: `block_retention: 168h`, then `make restart-telemetry` |
 
 ### Check Storage
 

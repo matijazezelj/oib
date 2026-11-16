@@ -7,23 +7,32 @@ Distributed tracing using Grafana Tempo and Alloy.
 | Service | Port | Description |
 |---------|------|-------------|
 | **Tempo** | 3200 (localhost) | Trace storage and querying |
-| **Alloy** | 12346 (localhost) | OTLP receiver and processor |
+| **Tempo gRPC** | 9095 (localhost) | Tempo's internal gRPC API; not an OTLP port, do not send traces here |
+| **Alloy** | 12346 (localhost) | OTLP receiver and processor (UI at `/`) |
 
-**Trace ingestion ports** (localhost by default):
+Containers: `oib-tempo`, `oib-alloy-telemetry`. Volume: `oib-tempo-data`. `oib-tempo` loads the whole root `.env` (`env_file`), so its values, including `GRAFANA_ADMIN_PASSWORD`, are visible through `docker inspect oib-tempo`.
+
+**Trace ingestion ports** (`OTEL_BIND_ADDR`, default `127.0.0.1`), served by `oib-alloy-telemetry`:
 
 | Protocol | Port | Description |
 |----------|------|-------------|
 | OTLP gRPC | 4317 | gRPC trace receiver |
-| OTLP HTTP | 4318 | HTTP trace receiver |
+| OTLP HTTP | 4318 | HTTP trace receiver (`/v1/traces`) |
 
-Set `OTEL_BIND_ADDR=0.0.0.0` only when applications on other hosts need to send traces, and protect the endpoints with appropriate network controls.
+Set `OTEL_BIND_ADDR=0.0.0.0` only when applications on other hosts need to send traces, and protect the endpoints with appropriate network controls. The receivers have no authentication.
 
 ## Features
 
 - **OpenTelemetry native**: Accepts OTLP traces (gRPC and HTTP)
 - **TraceQL**: Query traces using Grafana's TraceQL language
-- **Efficient storage**: Object-storage compatible backend
-- **Trace-to-logs**: Link traces to logs in Grafana
+- **Local storage**: Blocks and WAL on the `oib-tempo-data` volume (`backend: local`)
+- **Trace-to-logs and trace-to-profiles**: Links from a span to Loki and Pyroscope in Grafana (see the [Grafana README](../grafana/README.md#datasources) for the caveats)
+
+## Limitations
+
+- **Traces only.** The Alloy pipeline only has a traces output. The OTLP receiver has no metrics or logs output, so OTLP metrics and logs sent to 4317/4318 are not stored anywhere. Send metrics to Prometheus and logs to stdout (collected by the logging stack).
+- **Span attributes are overwritten.** Alloy upserts `environment="homelab"` and `collector="alloy"` on every span (`otelcol.processor.attributes`), replacing any `environment` attribute your app sets. Edit or remove those actions in `config/alloy-config.alloy`.
+- **No service graph or span metrics in Prometheus.** Tempo's metrics generator runs the `service-graphs` and `span-metrics` processors, but `metrics_generator.storage.remote_write` is empty, so no `traces_service_graph_*` or `traces_spanmetrics_*` series are written anywhere. Grafana's Service Graph view stays empty.
 
 ## Quick Start
 
@@ -42,14 +51,17 @@ make logs-telemetry
 
 ### Tempo Configuration
 Edit `config/tempo.yaml`:
-- `retention_duration`: How long to keep traces (default: 72h = 3 days)
-- `max_bytes_per_trace`: Maximum trace size
+- `compactor.compaction.block_retention`: How long to keep traces (default: 72h = 3 days)
+
+Retention is set only in this file; there is no environment variable for it. Apply changes with `make restart-telemetry`.
 
 ### Alloy Configuration
 Edit `config/alloy-config.alloy`:
 - OTLP receiver settings
-- Batch processing configuration
-- Tempo exporter endpoint
+- Batch processing configuration (1s timeout, 1024 spans)
+- Span attributes added to every span
+- Tempo exporter endpoint (`oib-tempo:4317`, plaintext)
+- An optional, commented-out debug exporter that logs received traces
 
 ## Environment Variables
 
@@ -107,15 +119,7 @@ export OTEL_SERVICE_NAME=my-service
 ```
 
 ### Docker Compose Integration
-```yaml
-services:
-  my-app:
-    environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318
-      - OTEL_SERVICE_NAME=my-app
-```
-
-Or on `oib-network`:
+Recommended: join `oib-network` and use the container name.
 ```yaml
 services:
   my-app:
@@ -124,7 +128,24 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://oib-alloy-telemetry:4318
       - OTEL_SERVICE_NAME=my-app
+
+networks:
+  oib-network:
+    external: true
 ```
+
+Without `oib-network`, go through the host:
+```yaml
+services:
+  my-app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318
+      - OTEL_SERVICE_NAME=my-app
+```
+
+On Linux this only works with `OTEL_BIND_ADDR=0.0.0.0`: with the default `127.0.0.1`, the OTLP ports are not reachable through the Docker bridge gateway.
 
 ## Troubleshooting
 
@@ -138,9 +159,23 @@ open http://localhost:12346
 # Verify OTLP endpoint is accessible
 curl -v http://localhost:4318/v1/traces
 
-# View Tempo logs
-docker logs oib-tempo
+# View Tempo and Alloy logs
+make logs-telemetry
+
+# Show the endpoints to configure in your app
+make info-telemetry
 ```
+
+The Tempo image is distroless, so the container has no Docker healthcheck. `make health` and the Blackbox probe on `http://oib-tempo:3200/ready` report its readiness instead.
+
+## Backup and Restore
+
+```bash
+make backup-tempo                          # writes ./backups/tempo_<YYYYMMDD_HHMMSS>.tar.gz
+make restore-tempo FILE=./backups/tempo_YYYYMMDD_HHMMSS.tar.gz
+```
+
+Restore asks for confirmation, stops Tempo, replaces the contents of `oib-tempo-data`, and starts Tempo again. `make uninstall-telemetry` deletes the volume.
 
 ## Querying Traces
 
