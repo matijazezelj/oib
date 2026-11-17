@@ -120,7 +120,7 @@ echo "backup_duration_seconds 42" | curl --data-binary @- \
   http://localhost:9091/metrics/job/backup/instance/server1
 ```
 
-Prometheus does not scrape the Pushgateway until you uncomment the `pushgateway` job in `config/prometheus.yml` and run `make restart-metrics`. No make target starts or stops the Pushgateway; manage it with `docker compose --profile pushgateway ...` from `metrics/`. It has no volume, so pushed metrics are lost when the container is recreated.
+Prometheus does not scrape the Pushgateway until you uncomment the `pushgateway` job in `config/prometheus.yml` and run `make restart-metrics`. Start it with `docker compose --env-file ../.env --profile pushgateway up -d` from `metrics/`. Once it runs, `make install-metrics`, `make update` and `make update-metrics` keep it on the pinned version, and `make uninstall-metrics` removes it. It has no volume, so pushed metrics are lost when the container is recreated.
 
 ## Alert Rules
 

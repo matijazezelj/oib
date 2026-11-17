@@ -40,7 +40,7 @@ make logs-profiling
 
 Pyroscope is an optional stack, so the all-stack targets leave it alone:
 - `make start`, `make stop`, `make restart`, `make update`, and `make uninstall` do not touch it. Use `start-profiling`, `stop-profiling`, `restart-profiling`, `update-profiling`, and `uninstall-profiling`. Run `make uninstall-profiling` before `make uninstall`, otherwise `oib-network` cannot be removed while Pyroscope is still attached.
-- `make backup` does not back up `oib-pyroscope-data`, and there is no `backup-profiling` target.
+- `make backup` includes `oib-pyroscope-data` when it exists; `make backup-pyroscope` / `make restore-pyroscope FILE=...` handle it alone.
 - `make health` checks it only when it is installed; `make status` lists it as stopped when it is not running. `make latest` updates it only when it is installed.
 
 ## Limitations

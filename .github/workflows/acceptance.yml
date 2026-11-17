@@ -1,0 +1,73 @@
+name: acceptance
+
+# Boots the real stacks and checks that data survives a backup/restore round
+# trip and an upgrade from each earlier release. See testing/acceptance/README.md.
+
+on:
+  pull_request:
+    paths:
+      - '**/compose.yaml'
+      - '**/config/**'
+      - 'grafana/provisioning/**'
+      - 'Makefile'
+      - '.env.example'
+      - 'testing/acceptance/**'
+      - '.github/workflows/acceptance.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # The runner is thrown away afterwards; keep the stack up so a failure can be inspected below.
+  KEEP: '1'
+
+jobs:
+  backup-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Backup / restore round trip
+        run: make test-backup
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^oib-'); do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
+          done
+
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Add every new release here; accepted losses go in testing/acceptance/upgrade-expectations.
+        from: [v1.0.0, v1.1.0]
+    name: upgrade from ${{ matrix.from }}
+    steps:
+      - name: Checkout (with tags)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Upgrade test
+        run: make test-upgrade FROM=${{ matrix.from }}
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^oib-'); do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
+          done
