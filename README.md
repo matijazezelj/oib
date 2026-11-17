@@ -621,6 +621,7 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
 - **Not guaranteed:** an *application-consistent* backup. OIB does not ask Prometheus, Loki, Tempo, Grafana or Pyroscope to checkpoint or flush first.
   - Whatever a component held only in memory at the freeze is not in the archive.
   - Restoring relies on each component's crash recovery: write-ahead-log replay, or SQLite journal recovery for Grafana.
+  - Derived files can be caught mid-write too. CI has seen Pyroscope's bucket index (a cached listing of its blocks) come back corrupt from a frozen copy. Pyroscope logged `corrupted bucket index found, falling back to fetching directly from bucket` and rebuilt the index; every profile was restored.
   - Prometheus would need its snapshot API (`--web.enable-admin-api`) for an application-consistent copy. Tempo 3 has no flush API at all.
 - **Observed under test, not guaranteed:** `make test-backup` restores archives taken while logs and traces are being written. It has always found:
   - every log line Loki acknowledged before its freeze;

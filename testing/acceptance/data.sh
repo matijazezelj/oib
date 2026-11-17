@@ -233,13 +233,25 @@ BACKUP_TEST_IMAGE=alpine:3.20
 # (Tempo's "failed to replay block. removing." is not listed: it is logged on every
 # clean restart for the empty block Tempo creates while shutting down.)
 RECOVERY_ERRORS='corrupt|repair|checksum|malformed|truncat|invalid magic|unexpected eof|error replaying'
-# Matching lines are written to $WORK/recovery-errors.txt (check() hides output).
+# Messages that match RECOVERY_ERRORS but describe a component recovering by
+# itself from derived data caught mid-write by the frozen copy. They are
+# reported as notes, not failures; the data checks still decide whether
+# anything was lost. Keep this list short and explain every entry.
+#   Pyroscope's bucket index is a cached listing of its blocks; when it is
+#   corrupt Pyroscope reads the bucket directly and its compactor rewrites the
+#   index (seen in CI, 2026-11-17; all profiles restored).
+RECOVERY_SELF_HEALING='corrupted bucket index found, falling back to fetching directly from bucket'
+# Matching lines are written to $WORK/recovery-errors.txt (check() hides output);
+# self-healing ones go to $WORK/recovery-notes.txt.
 no_recovery_errors() { # SINCE (unix seconds)
-  local c out bad=0 report="$WORK/recovery-errors.txt"
-  : >"$report"
+  local c lines out notes bad=0 report="$WORK/recovery-errors.txt" notefile="$WORK/recovery-notes.txt"
+  : >"$report"; : >"$notefile"
   for c in prometheus loki tempo grafana pyroscope; do
-    out=$(docker logs --since "$1" "oib-$c" 2>&1 | grep -iE "$RECOVERY_ERRORS" | head -5 || true)
+    lines=$(docker logs --since "$1" "oib-$c" 2>&1 | grep -iE "$RECOVERY_ERRORS" || true)
+    out=$(printf '%s\n' "$lines" | grep -vF "$RECOVERY_SELF_HEALING" | grep -v '^$' | head -5 || true)
+    notes=$(printf '%s\n' "$lines" | grep -F "$RECOVERY_SELF_HEALING" | head -2 || true)
     if [ -n "$out" ]; then printf '    oib-%s:\n%s\n' "$c" "$(printf '%s\n' "$out" | cut -c1-300 | sed 's/^/      /')" >>"$report"; bad=1; fi
+    if [ -n "$notes" ]; then printf '    oib-%s (recovered by itself):\n%s\n' "$c" "$(printf '%s\n' "$notes" | cut -c1-300 | sed 's/^/      /')" >>"$notefile"; fi
   done
   return $bad
 }

@@ -87,6 +87,7 @@ make --no-print-directory restore-all STAMP="$STAMP" BACKUP_DIR="$WORK/backups" 
 wait_ready with-profiling
 check restore-clean-recovery 1 no_recovery_errors "$RESTORE_SINCE"
 [ -s "$WORK/recovery-errors.txt" ] && cat "$WORK/recovery-errors.txt"
+if [ -s "$WORK/recovery-notes.txt" ]; then log "self-healing recovery messages (not failures):"; cat "$WORK/recovery-notes.txt"; fi
 # Writes acknowledged before a component's backup started must be in its archive.
 # Loki acknowledges a push once it is stored; spans travel through Alloy's batch
 # processor first, so traces get a 10 s allowance.
