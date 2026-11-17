@@ -77,6 +77,8 @@ _oib_targets() {
         'test-api:Run k6 API load test'
         'test-backup:Backup/restore round trip test (deletes OIB data)'
         'test-upgrade:Upgrade test from FROM=<tag> (deletes OIB data)'
+        'test-tempo-recovery:Tempo migration failure/rollback test (deletes OIB data)'
+        'test-isolation:Self-test of isolated acceptance runs'
 
         # Backup & Restore
         'backup:Backup all OIB data volumes'
@@ -94,6 +96,7 @@ _oib_targets() {
         'restore-all:Restore every component of one backup (STAMP=...)'
         'migrate-grafana-volume:Move Grafana data from the pre-1.1.0 volume'
         'migrate-tempo:Upgrade Tempo 2 -> 3 without losing traces'
+        'rollback-tempo:Undo migrate-tempo (back to Tempo 2)'
         
         # Utilities
         'open:Open Grafana in browser'

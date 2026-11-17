@@ -32,31 +32,73 @@ DIND_IMAGE=docker:27.5.1-dind
 # teardown of a direct (non-isolated) run never match them.
 RUNNER_IMAGE=oibtest-runner:2
 NAME=oibtest-dind-$$
+RUNNER=oibtest-runner-$$
 SCRATCH=oibtest-scratch-$$
 CACHE=oibtest-dind-cache
+LOCK=oibtest-lock
 
-# Two inner daemons must not share one image cache (/var/lib/docker).
-if [ -n "$(docker ps -q --filter name=^oibtest-dind-)" ]; then
-  echo "another isolated acceptance run is in progress ($(docker ps --filter name=^oibtest-dind- --format '{{.Names}}')); wait for it to finish" >&2
-  exit 2
-fi
-
+LOCKED=0
+CREATED_ENV=0
 cleanup() {
   local rc=$?
+  trap - EXIT INT TERM
+  docker rm -f "$RUNNER" >/dev/null 2>&1 || true
   docker rm -f -v "$NAME" >/dev/null 2>&1 || true
   docker volume rm "$SCRATCH" >/dev/null 2>&1 || true
-  [ "${DIND_KEEP_CACHE:-1}" = 0 ] && docker volume rm "$CACHE" >/dev/null 2>&1
+  if [ "${DIND_KEEP_CACHE:-1}" = 0 ]; then docker volume rm "$CACHE" >/dev/null 2>&1 || true; fi
   # worktrees the test created live in the scratch volume, which is gone now
   git -C "$ROOT" worktree prune >/dev/null 2>&1 || true
-  exit $rc
+  if [ "$CREATED_ENV" = 1 ]; then rm -f "$ROOT/.env"; fi
+  if [ "$LOCKED" = 1 ]; then docker rm -f "$LOCK" >/dev/null 2>&1 || true; fi
+  exit "$rc"
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 echo "==> building the runner image"
 docker build -q -t "$RUNNER_IMAGE" - >/dev/null <<'EOF'
 FROM docker:27.5.1-cli
 RUN apk add --no-cache bash make curl jq git coreutils util-linux findutils gawk lsof
 EOF
+
+# One isolated run at a time: two inner daemons must not share the image cache
+# (/var/lib/docker). The lock is a container name, which Docker creates
+# atomically; it records the owner's PID so a lock left by a killed run is
+# recognised as stale.
+acquire_lock() {
+  local owner host
+  for _ in $(seq 1 10); do
+    if docker create --name "$LOCK" --label "oibtest.pid=$$" --label "oibtest.host=$(hostname)" \
+         "$RUNNER_IMAGE" true >/dev/null 2>&1; then
+      LOCKED=1; return 0
+    fi
+    if ! docker inspect "$LOCK" >/dev/null 2>&1; then
+      sleep 1; continue   # create failed for another reason (e.g. image being re-tagged); try again
+    fi
+    owner=$(docker inspect -f '{{index .Config.Labels "oibtest.pid"}}' "$LOCK" 2>/dev/null || true)
+    host=$(docker inspect -f '{{index .Config.Labels "oibtest.host"}}' "$LOCK" 2>/dev/null || true)
+    if [ -n "$owner" ] && [ "$host" = "$(hostname)" ] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "==> removing a stale lock and leftovers of an interrupted run (pid $owner)"
+      docker ps -aq --filter name=^oibtest-runner- --filter name=^oibtest-dind- | xargs -r docker rm -f -v >/dev/null 2>&1 || true
+      docker volume ls -q --filter name=^oibtest-scratch- | xargs -r docker volume rm >/dev/null 2>&1 || true
+      docker rm -f "$LOCK" >/dev/null 2>&1 || true
+      continue
+    fi
+    echo "another isolated acceptance run is in progress (pid ${owner:-?}); wait for it to finish" >&2
+    exit 2
+  done
+  echo "could not take the lock $LOCK" >&2; exit 2
+}
+acquire_lock
+
+# A temporary .env is made here, on the host side, so it is removed even when
+# the run is interrupted and the runner container is killed.
+if [ ! -f "$ROOT/.env" ]; then
+  cp "$ROOT/.env.example" "$ROOT/.env"
+  sed -i.bak "s/^GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=$(od -An -tx1 -N12 /dev/urandom | tr -d ' \n')/" "$ROOT/.env"
+  rm -f "$ROOT/.env.bak"
+  CREATED_ENV=1
+fi
 
 echo "==> starting the inner Docker daemon"
 docker volume create "$SCRATCH" >/dev/null
@@ -72,11 +114,23 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 docker exec "$NAME" docker -H tcp://127.0.0.1:2375 info >/dev/null || { docker logs "$NAME" | tail -20; exit 1; }
+# The cache volume is meant for images only. Containers, volumes and networks
+# that an interrupted earlier run left inside the inner daemon are removed, so
+# the test starts from a clean inner host.
+inner() { docker exec "$NAME" docker -H tcp://127.0.0.1:2375 "$@"; }
+leftovers=$(inner ps -aq)
+if [ -n "$leftovers" ]; then
+  echo "==> removing containers an earlier interrupted run left in the inner daemon"
+  # shellcheck disable=SC2086
+  inner rm -f $leftovers >/dev/null
+fi
+inner volume prune -af >/dev/null
+inner network prune -f >/dev/null
 # the scratch volume must be writable by the (non-root) runner
 docker exec "$NAME" chmod 1777 /acceptance-tmp
 
 echo "==> running $TEST $* inside the isolated daemon"
-docker run --rm \
+docker run --rm --name "$RUNNER" \
   --network "container:$NAME" \
   --user "$(id -u):$(id -g)" \
   -e DOCKER_HOST=tcp://127.0.0.1:2375 \
@@ -87,4 +141,7 @@ docker run --rm \
   -v "$ROOT":"$ROOT" \
   -v "$SCRATCH":/acceptance-tmp \
   -w "$ROOT" \
-  "$RUNNER_IMAGE" "$DIR/$TEST" "$@"
+  "$RUNNER_IMAGE" "$DIR/$TEST" "$@" &
+# wait (unlike a foreground command) returns as soon as a signal arrives, so an
+# interrupt reaches cleanup right away instead of after the test finishes.
+wait $!

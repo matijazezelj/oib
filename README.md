@@ -583,7 +583,18 @@ What survives an upgrade is checked in CI on every change to the stacks (`make t
 - **Tempo 2 → 3** (upgrading from v1.0.0) is a migration, not an image refresh:
   - Tempo 3 ignores Tempo 2's write-ahead log, so recreating the container drops every trace Tempo 2 has not flushed to disk yet, which can be up to the last 5 minutes.
   - `make install`, `make update`, `make update-telemetry` and `make latest` therefore refuse to run while Tempo 2 is installed.
-  - `make migrate-tempo` pulls the new images, backs Tempo 2 up, makes it flush everything to disk and stop accepting traces (Alloy queues and retries them), and recreates it as Tempo 3 right away. Afterwards every trace opens by ID, including those sent during the switch. The upgrade test checks this under continuous trace load.
+  - `make migrate-tempo` runs these steps. Afterwards every trace opens by ID, including those sent during the switch. The upgrade test checks this under continuous trace load.
+    1. Pull the new images.
+    2. Dry-run the new Tempo with the new config in a scratch container.
+    3. Back up Tempo 2, and save its image and the config file it runs with, so a rollback is possible. That saved config is dry-run as well; if Tempo 2 would not start with it, the migration stops before changing anything. `NO_ROLLBACK=1` migrates without a rollback option.
+    4. Make Tempo 2 flush everything to disk and stop accepting traces. Alloy queues them and retries.
+    5. Recreate Tempo as version 3.
+  - **If something goes wrong:**
+    - If the pull or the dry run fails, nothing has changed and Tempo 2 keeps running.
+    - If the run is interrupted after step 4, Tempo 2 is up but accepts no traces. Run `make migrate-tempo` again.
+    - If the new Tempo does not become ready, Tempo 2's traces are already safe on disk. Either fix the cause and run `make update-telemetry SKIP_TEMPO_MIGRATION=1`, or go back with `make rollback-tempo`. The rollback restores Tempo 2 with its data from just before the migration; traces received after that are lost.
+    - `make test-tempo-recovery` checks each of these cases.
+  - **How long Alloy holds traces while Tempo is down:** up to 10 minutes per batch, and at most 1000 batches, in memory. After that, or if the Alloy container restarts, queued traces are dropped.
   - Run it right after `git pull`, before anything restarts Tempo: the pulled `tempo.yaml` is Tempo 3 syntax, so a restarted Tempo 2 crash-loops and can no longer be flushed. If that has already happened, its unflushed traces are gone; continue with `make update SKIP_TEMPO_MIGRATION=1`.
   - Search lags for a while: traces received in the 15 minutes before the migration appear in search once they are 15 minutes old. Tempo 3 answers searches over the last 15 minutes from its live store only.
   - To skip the migration and accept the loss, add `SKIP_TEMPO_MIGRATION=1`. Tempo 2 must be running for the flush; a stopped Tempo 2 cannot be flushed.
@@ -600,11 +611,25 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
 ```
 
 - Backups are `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (override with `make backup BACKUP_DIR=/path`), owned by the user who ran `make`; `backups/` is git-ignored. One `make backup` run gives every file the same timestamp.
-- Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after.
-  - This is a crash-consistent copy, not an application-coordinated one: no checkpoint or flush happens first.
-  - `make test-backup` takes archives under write load, restores them, and checks that every log line Loki acknowledged before the freeze is back. Traces sent more than 10 s before the freeze must also be back. Traces from the last few seconds may be lost, as they would be in a crash: they can still be in Alloy's batch or in Tempo's newest, unfinished block.
-  - The freeze takes under a second, or about 10 s for a 90 MB Grafana volume.
-  - Requests arriving during a freeze wait.
+- Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after. The freeze takes under a second, or about 10 s for a 90 MB Grafana volume. Requests arriving during a freeze wait.
+
+**What a backup does and does not guarantee**
+
+- **Guaranteed by design:**
+  - An archive is the volume exactly as it was at one instant, because nothing in the container can write while it is frozen. That is a *crash-consistent* copy: the same state the disk would hold if the process had been killed at that moment.
+  - Archives are complete or absent, never partial (see below).
+- **Not guaranteed:** an *application-consistent* backup. OIB does not ask Prometheus, Loki, Tempo, Grafana or Pyroscope to checkpoint or flush first.
+  - Whatever a component held only in memory at the freeze is not in the archive.
+  - Restoring relies on each component's crash recovery: write-ahead-log replay, or SQLite journal recovery for Grafana.
+  - Prometheus would need its snapshot API (`--web.enable-admin-api`) for an application-consistent copy. Tempo 3 has no flush API at all.
+- **Observed under test, not guaranteed:** `make test-backup` restores archives taken while logs and traces are being written. It has always found:
+  - every log line Loki acknowledged before its freeze;
+  - every trace sent more than 10 s before Tempo's freeze;
+  - no corruption or repair messages from any component.
+
+  These are results under the tested load and versions (CI runs them on every change and weekly), not a promise for every workload. Traces from the last seconds before a freeze can be lost, as in a crash: they may still be in Alloy's batch or in Tempo's newest, unfinished block.
+- If you need application-consistent backups, stop the stack for the backup (`make stop && make backup && make start`) and accept the gap in collection.
+
 - Covers Prometheus, Loki, Tempo, Grafana and, when the profiling stack is installed, Pyroscope. The shared-services volumes (PostgreSQL, Redis) are not backed up.
 - An archive is written under a `.partial` name and renamed only when complete. A failed or interrupted backup unpauses the container and leaves no file behind. A container left paused by a killed backup is unpaused by the next one.
 - `restore-*` asks for confirmation (`YES=1` skips it), checks that the archive is readable, stops that one service, **replaces the current volume contents** with the archive and starts the service again. `FILE` may be relative or absolute. The component's stack must be installed first.

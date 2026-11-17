@@ -18,7 +18,12 @@ make test-upgrade                         # upgrade from the latest release tag
 - Its image cache is kept in the volume `oibtest-dind-cache`, so later runs skip most pulls. Set `DIND_KEEP_CACHE=0` to drop it, or remove it with `docker volume rm oibtest-dind-cache`.
 - The repository is mounted at the same path inside, and the test's temporary files live in a scratch volume, so bind mounts in the compose files resolve. If there is no `.env`, a temporary one is created in the checkout and removed afterwards.
 - Requires Docker with privileged containers allowed. `KEEP=1` has no effect here, because the inner daemon is removed at the end.
-- One isolated run at a time: a second one refuses to start while an `oibtest-dind-*` container is running, because both would use the same image cache.
+- **One isolated run at a time.** Both runs would use the same image cache.
+  - The lock is a container named `oibtest-lock`, which Docker creates atomically, so two runs started at the same moment cannot both get it.
+  - A lock left by a run killed with `kill -9` is recognised (its PID is gone). The next run removes it and that run's leftovers.
+- **Leftover state is cleared at the start of each run.** The cache volume keeps only images; containers, volumes and networks that an interrupted run left inside the inner daemon are removed.
+- **Cleanup after an interrupt:** Ctrl+C or SIGTERM removes the inner daemon, the test container, the scratch volume, the lock and a `.env` the run created. `kill -9` cannot clean up. The next isolated run removes its containers and volumes, but a `.env` it created stays in the checkout.
+- `make test-isolation` checks all of this: concurrent start, Ctrl+C, `kill -9` and stale-lock takeover, and that the host's OIB install, `.env` and git worktrees are unchanged.
 
 Requirements: Docker with Compose v2, `curl`, `jq`, `make`, `git` (and the release tags: `git fetch --tags`). The default OIB ports must be free. With images cached, a run takes about 4 minutes. Each phase header shows the elapsed seconds. Locally, the upgrade from a Tempo 2 release (v1.0.0) skips the final Tempo search check, which needs about 15 minutes; set `OIB_TEST_FULL=1` to wait for it. CI always does. If there is no `.env`, a temporary one with a random Grafana password is created and removed afterwards.
 
@@ -83,6 +88,14 @@ Checks retry for up to 120 s (`VERIFY_TIMEOUT`), because data takes a few second
 6. Run `make update` a second time. It must not print the Grafana migration warning, and the seeded dashboard must still be there.
 
 Losses that are known and accepted for a starting release are listed in [`upgrade-expectations`](upgrade-expectations). They are reported as `XFAIL` and do not fail the run. If a listed check passes, it is reported as `XPASS`; remove it from the list. Any loss not listed fails the test.
+
+## `tempo-migration-recovery.sh` (`make test-tempo-recovery`)
+
+Installs the telemetry stack of a Tempo 2 release (`FROM`, default v1.0.0) and drives `make migrate-tempo` through its failure cases:
+1. **Unavailable image:** the migration aborts, and Tempo 2 is unchanged and still accepts traces.
+2. **Broken new config:** the dry run catches it, and Tempo 2 is unchanged and still accepts traces. No dry-run container is left behind.
+3. **Interrupted after `/shutdown`:** Tempo 2 is up but its ingester is stopped, and a trace sent meanwhile waits in Alloy's queue. Rerunning `make migrate-tempo` completes, and every trace, including the queued one, opens by ID on Tempo 3.
+4. **`make rollback-tempo`:** Tempo 2 is back with its pre-migration traces and accepts new ones. Migrating again keeps those traces as well.
 
 ## Debugging
 

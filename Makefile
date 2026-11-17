@@ -7,9 +7,9 @@
         logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
         network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling latest \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
-        test-load test-stress test-spike test-api test-backup test-upgrade \
+        test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-isolation \
         backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
-        migrate-grafana-volume migrate-tempo tempo-guard restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope
+        migrate-grafana-volume migrate-tempo rollback-tempo tempo-guard restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope
 
 # Colors - real ESC bytes, so plain `echo` renders them under both dash and bash
 CYAN := $(shell printf '\033[36m')
@@ -95,13 +95,13 @@ help: ## Show this help message
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Acceptance Tests (delete all OIB data):$(RESET)"
-	@grep -E '^(test-backup|test-upgrade):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
-	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean|migrate-tempo|migrate-grafana-volume):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean|migrate-tempo|rollback-tempo|migrate-grafana-volume):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Backup & Restore:$(RESET)"
 	@grep -E '^(backup|restore|restore-all):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -218,6 +218,8 @@ tempo-guard:
 		exit 1; \
 	fi
 
+TEMPO_ROLLBACK_DIR = $(abspath $(BACKUP_DIR))/tempo2-rollback
+
 migrate-tempo: ## Upgrade Tempo 2 -> 3 without losing traces (flush, backup, upgrade)
 	@major=$(tempo_major); \
 	if [ "$$major" != "2" ]; then echo "$(GREEN)✓$(RESET) Tempo is not on version 2 ($$(docker inspect -f '{{.Config.Image}}' oib-tempo 2>/dev/null || echo 'not installed')); nothing to migrate."; exit 0; fi; \
@@ -226,27 +228,93 @@ migrate-tempo: ## Upgrade Tempo 2 -> 3 without losing traces (flush, backup, upg
 		echo "  Start it from the previous OIB release, or upgrade without flushing: make update SKIP_TEMPO_MIGRATION=1"; \
 		exit 1; \
 	fi; \
-	echo "$(CYAN)[1/4] Pulling the new telemetry images...$(RESET)"; \
-	(cd telemetry && $(DOCKER_COMPOSE) pull -q) || exit 1; \
-	echo "$(CYAN)[2/4] Backing up Tempo 2 (to roll back with restore-tempo + the previous release)...$(RESET)"; \
-	$(MAKE) --no-print-directory backup-tempo || exit 1; \
-	echo "$(CYAN)[3/4] Flushing Tempo 2 and stopping its ingester...$(RESET)"; \
+	echo "$(CYAN)[1/5] Pulling the new telemetry images...$(RESET)"; \
+	(cd telemetry && $(DOCKER_COMPOSE) pull -q) || { echo "$(RED)✗ Pull failed; nothing was changed, Tempo 2 keeps running.$(RESET)"; exit 1; }; \
+	dryrun() { \
+		docker rm -f oib-tempo-dryrun >/dev/null 2>&1; \
+		docker run -d --name oib-tempo-dryrun --tmpfs /var/tempo:mode=1777 -v "$$2":/etc/tempo/tempo.yaml:ro "$$1" -config.file=/etc/tempo/tempo.yaml >/dev/null || return 1; \
+		i=0; until docker logs oib-tempo-dryrun 2>&1 | grep -q 'msg="Tempo started"'; do \
+			i=$$((i+1)); \
+			if [ $$i -gt 60 ] || [ "$$(docker inspect -f '{{.State.Running}}' oib-tempo-dryrun)" != true ]; then \
+				docker logs --tail 8 oib-tempo-dryrun 2>&1 | sed 's/^/    /'; docker rm -f oib-tempo-dryrun >/dev/null 2>&1; return 1; \
+			fi; sleep 1; \
+		done; \
+		docker rm -f oib-tempo-dryrun >/dev/null 2>&1; \
+	}; \
+	echo "$(CYAN)[2/5] Dry run: starting the new Tempo with the new config in a scratch container...$(RESET)"; \
+	img=$$(cd telemetry && $(DOCKER_COMPOSE) config --images 2>/dev/null | grep '/tempo:' | head -1); \
+	cfg="$${TEMPO_CONFIG:-./config/tempo.yaml}"; case "$$cfg" in /*) ;; *) cfg="$(CURDIR)/telemetry/$${cfg#./}" ;; esac; \
+	dryrun "$$img" "$$cfg" || { echo "$(RED)✗ $$img does not start with $$cfg; nothing was changed, Tempo 2 keeps running.$(RESET)"; exit 1; }; \
+	echo "  $(GREEN)✓$(RESET) $$img starts with the new config"; \
+	echo "$(CYAN)[3/5] Backing up Tempo 2 and saving what make rollback-tempo needs...$(RESET)"; \
+	snap="$(TEMPO_ROLLBACK_DIR)"; mkdir -p "$$snap"; \
+	old_img=$$(docker inspect -f '{{.Config.Image}}' oib-tempo); \
+	if [ "$(NO_ROLLBACK)" = 1 ]; then \
+		echo "  $(YELLOW)!$(RESET) NO_ROLLBACK=1: no rollback snapshot; make rollback-tempo will not be available"; \
+		for f in image tempo.yaml backup; do [ -e "$$snap/$$f" ] && mv -f "$$snap/$$f" "$$snap/$$f.old"; done; \
+	else \
+		docker cp oib-tempo:/etc/tempo/tempo.yaml "$$snap/tempo.yaml.new" >/dev/null 2>&1 \
+			|| { echo "$(RED)✗ Could not copy Tempo 2's config out of the container; nothing was changed.$(RESET)"; exit 1; }; \
+		dryrun "$$old_img" "$$snap/tempo.yaml.new" || { \
+			echo "$(RED)✗ $$old_img does not start with the config copied from the running container, so a rollback$(RESET)"; \
+			echo "$(RED)  would not work (was telemetry/config/tempo.yaml edited in place?). Nothing was changed.$(RESET)"; \
+			echo "  Put Tempo 2's config back in telemetry/config/tempo.yaml and restart Tempo, or migrate without"; \
+			echo "  a rollback option: make migrate-tempo NO_ROLLBACK=1"; \
+			exit 1; }; \
+	fi; \
+	$(MAKE) --no-print-directory backup-tempo TIMESTAMP=$(TIMESTAMP) || exit 1; \
+	if [ "$(NO_ROLLBACK)" != 1 ]; then \
+		mv -f "$$snap/tempo.yaml.new" "$$snap/tempo.yaml"; \
+		echo "$$old_img" > "$$snap/image"; \
+		echo "$(abspath $(BACKUP_DIR))/tempo_$(TIMESTAMP).tar.gz" > "$$snap/backup"; \
+		echo "  $(GREEN)✓$(RESET) rollback snapshot in $$snap ($$old_img starts with its saved config)"; \
+	fi; \
+	echo "$(CYAN)[4/5] Flushing Tempo 2 and stopping its ingester...$(RESET)"; \
 	m() { curl -fsS $(TEMPO_URL)/metrics 2>/dev/null | awk -v n="$$1" '$$1 ~ "^"n"({|$$)" { s += $$2 } END { printf "%d", s }'; }; \
-	curl -fsS -X POST $(TEMPO_URL)/shutdown >/dev/null || { echo "$(RED)✗ POST $(TEMPO_URL)/shutdown failed$(RESET)"; exit 1; }; \
+	curl -fsS -X POST $(TEMPO_URL)/shutdown >/dev/null || { echo "$(RED)✗ POST $(TEMPO_URL)/shutdown failed; nothing was changed, Tempo 2 keeps running.$(RESET)"; exit 1; }; \
 	i=0; until [ "$$(m tempo_ingester_live_traces)" = 0 ] && [ "$$(m tempo_ingester_flush_queue_length)" = 0 ]; do \
-		i=$$((i+1)); [ $$i -gt 60 ] && { echo "$(RED)✗ Tempo did not finish flushing within 60s$(RESET)"; exit 1; }; \
+		i=$$((i+1)); [ $$i -gt 60 ] && { echo "$(RED)✗ Tempo 2 did not finish flushing within 60s. It no longer accepts traces; run make migrate-tempo again, or make rollback-tempo.$(RESET)"; exit 1; }; \
 		sleep 1; \
 	done; \
 	sleep 2; \
-	echo "  $(GREEN)✓$(RESET) flushed; Tempo 2 no longer accepts traces (Alloy keeps retrying them)"; \
-	echo "$(CYAN)[4/4] Recreating Tempo on version 3...$(RESET)"; \
-	(cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans) || exit 1; \
-	i=0; until curl -fsS -o /dev/null $(TEMPO_URL)/ready 2>/dev/null; do i=$$((i+1)); [ $$i -gt 120 ] && break; sleep 1; done; \
+	echo "  $(GREEN)✓$(RESET) flushed; Tempo 2 no longer accepts traces (Alloy queues and retries them for up to 10 minutes)"; \
+	echo "$(CYAN)[5/5] Recreating Tempo on the new version...$(RESET)"; \
+	(cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans tempo) || true; \
+	i=0; until curl -fsS -o /dev/null $(TEMPO_URL)/ready 2>/dev/null; do \
+		i=$$((i+1)); \
+		if [ $$i -gt 120 ]; then \
+			echo "$(RED)$(BOLD)✗ The new Tempo did not become ready within 2 minutes.$(RESET)"; \
+			echo "  Tempo 2's traces are flushed to disk and safe. Alloy keeps retrying new traces for up to"; \
+			echo "  10 minutes (1000 batches in memory); after that they are dropped. Either:"; \
+			echo "    - fix forward: make logs-telemetry, fix the cause, then make update-telemetry SKIP_TEMPO_MIGRATION=1"; \
+			echo "    - go back:     make rollback-tempo  (Tempo 2 with the data as it was before the migration)"; \
+			exit 1; \
+		fi; sleep 1; \
+	done; \
 	echo ""; \
 	echo "$(GREEN)$(BOLD)✓ Tempo migrated to $$(docker inspect -f '{{.Config.Image}}' oib-tempo)$(RESET)"; \
 	echo "  Every trace opens by ID right away. Traces received in the 15 minutes before the"; \
 	echo "  migration show up in search once they are 15 minutes old (Tempo 3 searches only"; \
-	echo "  its live store for the most recent 15 minutes). Continue with: make update"
+	echo "  its live store for the most recent 15 minutes). Continue with: make update"; \
+	echo "  To go back to Tempo 2: make rollback-tempo (traces received after the migration are lost)"
+
+rollback-tempo: ## Undo migrate-tempo: Tempo 2 with its data as before the migration
+	@d="$(TEMPO_ROLLBACK_DIR)"; \
+	if [ ! -s "$$d/image" ] || [ ! -s "$$d/tempo.yaml" ] || [ ! -s "$$d/backup" ]; then \
+		echo "$(RED)✗ No rollback snapshot in $$d (it is written by make migrate-tempo).$(RESET)"; exit 1; fi; \
+	img=$$(cat "$$d/image"); file=$$(cat "$$d/backup"); \
+	[ -f "$$file" ] || { echo "$(RED)✗ Pre-migration backup $$file is missing.$(RESET)"; exit 1; }; \
+	echo "$(YELLOW)$(BOLD)⚠️  This puts Tempo back to $$img with its data as it was before the migration.$(RESET)"; \
+	echo "  Traces received since then are lost (Tempo 2 cannot read Tempo 3's data)."; \
+	$(call confirm,Roll back?); \
+	docker rm -f oib-tempo >/dev/null 2>&1; \
+	docker rm -f oib-restore-tempo >/dev/null 2>&1; \
+	docker run --rm --name oib-restore-tempo -v oib-tempo-data:/data -v "$$file":/backup.tar.gz:ro $(BACKUP_IMAGE) \
+		sh -c "tar tzf /backup.tar.gz >/dev/null && find /data -mindepth 1 -delete && tar xzf /backup.tar.gz -C /data" \
+		|| { echo "$(RED)✗ Restoring $$file failed$(RESET)"; exit 1; }; \
+	(cd telemetry && TEMPO_VERSION="$${img##*:}" TEMPO_CONFIG="$$d/tempo.yaml" $(DOCKER_COMPOSE) up -d tempo) || exit 1; \
+	i=0; until curl -fsS -o /dev/null $(TEMPO_URL)/ready 2>/dev/null; do i=$$((i+1)); [ $$i -gt 120 ] && { echo "$(RED)✗ Tempo 2 did not become ready$(RESET)"; exit 1; }; sleep 1; done; \
+	echo "$(GREEN)✓ Tempo rolled back to $$img.$(RESET) make migrate-tempo migrates again when you are ready."
 
 # Releases before 1.1.0 let Compose name Grafana's volume oib-grafana_oib-grafana-data;
 # since 1.1.0 it is oib-grafana-data. Move the data over so upgrades keep it.
@@ -1217,6 +1285,12 @@ test-backup: ## Backup -> wipe -> restore round trip (ISOLATED=1: in Docker-in-D
 
 test-upgrade: ## Upgrade from FROM=<tag> and verify data (ISOLATED=1: in Docker-in-Docker)
 	@$(ACCEPTANCE_RUN) upgrade.sh $(FROM)
+
+test-tempo-recovery: ## Tempo 2->3 migration failures, rerun and rollback (FROM=v1.0.0; ISOLATED=1)
+	@$(ACCEPTANCE_RUN) tempo-migration-recovery.sh $(FROM)
+
+test-isolation: ## Self-test of ISOLATED=1: concurrent, interrupted and killed runs clean up
+	@testing/acceptance/isolation-selftest.sh
 
 # ==================== Backup & Restore ====================
 #
