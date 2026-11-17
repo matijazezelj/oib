@@ -10,8 +10,13 @@ services:
       - "127.0.0.1:${PYROSCOPE_PORT:-4040}:4040"
     volumes:
       - oib-pyroscope-data:/data
+    # Single instance: skip the readiness delays meant for rolling updates in a
+    # cluster (otherwise /ready takes ~60s). Note: a positional argument such as
+    # "server" before these would stop flag parsing and silently drop them.
     command:
-      - "server"
+      - "-metastore.min-ready-duration=0"
+      - "-segment-writer.min-ready-duration=0"
+      - "-ingester.min-ready-duration=0"
     networks:
       - oib-network
     # Note: Pyroscope uses a distroless image with no shell/wget/curl

@@ -20,7 +20,7 @@ make test-upgrade                         # upgrade from the latest release tag
 - Requires Docker with privileged containers allowed. `KEEP=1` has no effect here, because the inner daemon is removed at the end.
 - One isolated run at a time: a second one refuses to start while an `oibtest-dind-*` container is running, because both would use the same image cache.
 
-Requirements: Docker with Compose v2, `curl`, `jq`, `make`, `git` (and the release tags: `git fetch --tags`). The default OIB ports must be free. A run takes 5 to 10 minutes, mostly pulling images and waiting for Pyroscope, which takes about 70 s to report ready. If there is no `.env`, a temporary one with a random Grafana password is created and removed afterwards.
+Requirements: Docker with Compose v2, `curl`, `jq`, `make`, `git` (and the release tags: `git fetch --tags`). The default OIB ports must be free. With images cached, a run takes about 4 minutes. Each phase header shows the elapsed seconds. Locally, the upgrade from a Tempo 2 release (v1.0.0) skips the final Tempo search check, which needs about 15 minutes; set `OIB_TEST_FULL=1` to wait for it. CI always does. If there is no `.env`, a temporary one with a random Grafana password is created and removed afterwards.
 
 ## What is checked
 

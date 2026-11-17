@@ -46,6 +46,7 @@ seed_grafana() { # RUN
     -d "{\"dashboard\":{\"uid\":\"oib-acc-$1\",\"title\":\"oib-acceptance $1\",\"panels\":[],\"schemaVersion\":39},\"overwrite\":true}"
 }
 
+
 # ---------- readers (succeed only when the data is there) ----------
 
 has_log() { # RUN
@@ -77,6 +78,8 @@ has_profile() { # RUN
 has_dashboard() { # RUN
   curl -fsS -u "$GRAFANA_AUTH" "$GRAFANA/api/dashboards/uid/oib-acc-$1" >/dev/null
 }
+
+has_prom_history_now() { has_prom_history "$(date +%s)"; }
 
 has_prom_history() { # SEED_TIME
   curl -fsS -G "$PROM/api/v1/query" --data-urlencode 'query=count_over_time(up{job="prometheus"}[2m])' \
@@ -248,15 +251,19 @@ seed_run() {
   local state=$1 prof=${2:-} run trace
   run=$(hex 8); trace=$(hex 32)
   log "seeding run $run (trace $trace)"
-  retry 60 has_prom_history "$(date +%s)" || die "Prometheus has no samples of up{job=\"prometheus\"} yet"
+  local tp; tp=$(date +%s)
+  retry 60 has_prom_history_now || die "Prometheus has no samples of up{job=\"prometheus\"} yet"
+  log "Prometheus has history after $(( $(date +%s) - tp ))s"
   seed_loki "$run" || die "Loki push failed"
   seed_trace "$run" "$trace" || die "OTLP trace export failed"
   seed_grafana "$run" || die "Grafana dashboard create failed"
   [ "$prof" = with-profiling ] && { seed_profile "$run" || die "Pyroscope ingest failed"; }
+  local t0; t0=$(date +%s)
   retry 60 has_log "$run" || die "seeded log line is not readable"
   retry 90 has_trace_by_id "$run" "$trace" || die "seeded trace is not readable"
   retry 30 has_dashboard "$run" || die "seeded dashboard is not readable"
   [ "$prof" = with-profiling ] && { retry 90 has_profile "$run" || die "seeded profile is not readable"; }
+  log "all seeded data readable after $(( $(date +%s) - t0 ))s"
   sleep 2
   cat >"$state" <<EOF
 RUN=$run
@@ -278,9 +285,13 @@ verify_persisted() {
   local ts=$t
   if [ -n "${TEMPO_SEARCH_LAG:-}" ]; then   # wait until the seeded trace is old enough to be searched in blocks
     ts=$(( SEED_TIME + TEMPO_SEARCH_LAG - $(date +%s) )); [ "$ts" -lt "$t" ] && ts=$t
-    log "tempo-search may take up to ${ts}s (Tempo 3 searches blocks only for data older than 15 minutes)"
   fi
-  check tempo-search      "$ts" has_trace_in_search "$RUN"
+  if [ "$ts" -gt "$t" ] && [ "${OIB_TEST_FULL:-${CI:-}}" != 1 ] && [ "${OIB_TEST_FULL:-${CI:-}}" != true ]; then
+    skip tempo-search "migrated traces become searchable after Tempo 3's 15-minute live window; OIB_TEST_FULL=1 waits ${ts}s, CI always does"
+  else
+    [ "$ts" -gt "$t" ] && log "tempo-search may take up to ${ts}s (Tempo 3 searches blocks only for data older than 15 minutes)"
+    check tempo-search      "$ts" has_trace_in_search "$RUN"
+  fi
   check grafana-dashboard "$t" has_dashboard "$RUN"
   [ "$PROFILING" = with-profiling ] && check pyroscope-data "$t" has_profile "$RUN"
   return 0

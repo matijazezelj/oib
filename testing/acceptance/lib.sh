@@ -18,7 +18,8 @@ fi
 log()   { printf '%s==>%s %s\n' "$C_CYAN" "$C_RESET" "$*"; }
 warn()  { printf '%s!%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
 die()   { printf '%s✗ %s%s\n' "$C_RED" "$*" "$C_RESET" >&2; exit 1; }
-phase() { printf '\n%s%s── %s ──%s\n' "$C_BOLD" "$C_CYAN" "$*" "$C_RESET"; }
+T0=$(date +%s)
+phase() { printf '\n%s%s── %s ──%s %s(+%ss)%s\n' "$C_BOLD" "$C_CYAN" "$*" "$C_RESET" "$C_CYAN" "$(( $(date +%s) - T0 ))" "$C_RESET"; }
 
 need() { for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "missing required command: $c"; done; }
 
@@ -78,6 +79,8 @@ guard_clean_host() {
 
 # Remove every OIB stack, volume and the network.
 teardown_all() {
+  # Everything is deleted anyway, so skip graceful shutdowns (Tempo alone takes 30s).
+  docker ps -aq --filter name=^oib- | xargs -r docker rm -f >/dev/null 2>&1 || true
   ( cd "$ROOT"
     make --no-print-directory demo-app-stop >/dev/null 2>&1 || true
     make --no-print-directory uninstall-profiling >/dev/null 2>&1 || true
@@ -91,12 +94,12 @@ teardown_all() {
 
 # ---------- polling ----------
 
-# retry SECONDS CMD... : rerun CMD every 3s until it succeeds or time runs out
+# retry SECONDS CMD... : rerun CMD every second until it succeeds or time runs out
 retry() {
   local deadline=$(( $(date +%s) + $1 )); shift
   until "$@" >/dev/null 2>&1; do
     [ "$(date +%s)" -ge "$deadline" ] && return 1
-    sleep 3
+    sleep 1
   done
 }
 
@@ -108,7 +111,6 @@ wait_ready() { # wait_ready [with-profiling]
     retry "$timeout" http_ok "$what" || die "not ready after ${timeout}s: $what"
   done
   if [ "${1:-}" = with-profiling ]; then
-    # Pyroscope 2 waits ~70s before reporting ready
     retry "$timeout" http_ok "$PYRO/ready" || die "not ready after ${timeout}s: $PYRO/ready"
   fi
   log "all endpoints ready"
@@ -116,7 +118,7 @@ wait_ready() { # wait_ready [with-profiling]
 
 # ---------- check bookkeeping ----------
 
-PASSED=0; FAILED=0; XFAILED=0; XPASSED=0
+PASSED=0; FAILED=0; XFAILED=0; XPASSED=0; SKIPPED=0
 FAILED_NAMES=()
 EXPECT_LOSS=${EXPECT_LOSS:-}   # space-separated check names that are expected to fail
 
@@ -140,6 +142,9 @@ check() {
   fi
 }
 
+# skip NAME REASON: a check that was deliberately not run
+skip() { SKIPPED=$((SKIPPED + 1)); printf '  %sSKIP%s  %s (%s)\n' "$C_YELLOW" "$C_RESET" "$1" "$2"; }
+
 # check_absent NAME FN [ARGS...]: control check, FN must NOT succeed (data really gone)
 check_absent() {
   local name=$1; shift
@@ -152,8 +157,8 @@ check_absent() {
 }
 
 summary() {
-  printf '\n%sResult:%s %d passed, %d failed, %d expected losses, %d unexpected survivals\n' \
-    "$C_BOLD" "$C_RESET" "$PASSED" "$FAILED" "$XFAILED" "$XPASSED"
+  printf '\n%sResult:%s %d passed, %d failed, %d expected losses, %d unexpected survivals, %d skipped (%ss)\n' \
+    "$C_BOLD" "$C_RESET" "$PASSED" "$FAILED" "$XFAILED" "$XPASSED" "$SKIPPED" "$(( $(date +%s) - T0 ))"
   if [ "$FAILED" -gt 0 ]; then
     printf '%sFailed:%s %s\n' "$C_RED" "$C_RESET" "${FAILED_NAMES[*]}"
     return 1

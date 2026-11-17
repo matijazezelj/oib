@@ -82,7 +82,7 @@ docker run --rm \
   -e DOCKER_HOST=tcp://127.0.0.1:2375 \
   -e HOME=/acceptance-tmp \
   -e TMPDIR=/acceptance-tmp \
-  -e VERIFY_TIMEOUT -e READY_TIMEOUT \
+  -e VERIFY_TIMEOUT -e READY_TIMEOUT -e OIB_TEST_FULL \
   -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
   -v "$ROOT":"$ROOT" \
   -v "$SCRATCH":/acceptance-tmp \

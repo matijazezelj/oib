@@ -398,37 +398,37 @@ uninstall: ## Remove all stacks and volumes (with confirmation)
 
 uninstall-grafana: ## Remove Grafana and volumes
 	@echo "$(YELLOW)Removing Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd grafana && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@$(call check_volume_removed,oib-grafana-data)
 	@echo "$(GREEN)✓ Grafana removed$(RESET)"
 
 uninstall-logging: ## Remove logging stack and volumes
 	@echo "$(YELLOW)Removing logging stack...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd logging && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@$(call check_volume_removed,oib-loki-data)
 	@echo "$(GREEN)✓ Logging stack removed$(RESET)"
 
 uninstall-metrics: ## Remove metrics stack and volumes
 	@echo "$(YELLOW)Removing metrics stack...$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd metrics && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@$(call check_volume_removed,oib-prometheus-data)
 	@echo "$(GREEN)✓ Metrics stack removed$(RESET)"
 
 uninstall-telemetry: ## Remove telemetry stack and volumes
 	@echo "$(YELLOW)Removing telemetry stack...$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd telemetry && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@$(call check_volume_removed,oib-tempo-data)
 	@echo "$(GREEN)✓ Telemetry stack removed$(RESET)"
 
 uninstall-profiling: ## Remove profiling stack and volumes
 	@echo "$(YELLOW)Removing profiling stack...$(RESET)"
-	@cd profiling && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd profiling && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@$(call check_volume_removed,oib-pyroscope-data)
 	@echo "$(GREEN)✓ Profiling stack removed$(RESET)"
 
 uninstall-services: ## Remove shared services and volumes (PostgreSQL + Redis)
 	@echo "$(YELLOW)Removing shared services...$(RESET)"
-	@cd services && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd services && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@echo "$(GREEN)✓ Shared services removed$(RESET)"
 
 # ==================== Status ====================
@@ -1117,7 +1117,7 @@ demo-app: ## Start demo app with PostgreSQL & Redis (realistic traces)
 
 demo-app-stop: ## Stop demo app and clean up
 	@echo "$(CYAN)Stopping Demo App...$(RESET)"
-	@cd examples/demo-app && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@cd examples/demo-app && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans --timeout 2
 	@echo "$(GREEN)✓$(RESET) Demo app stopped"
 
 demo-traffic: ## Generate traffic to demo app for realistic traces
@@ -1277,8 +1277,8 @@ if ! docker inspect oib-$(1) >/dev/null 2>&1; then \
 fi; \
 echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing $(1) data!$(RESET)"; \
 $(call confirm,Are you sure?); \
-echo "$(CYAN)Stopping $(1)...$(RESET)"; \
-(cd $($(1)_STACK) && $(DOCKER_COMPOSE) stop $(1)) >/dev/null 2>&1 || true; \
+echo "$(CYAN)Stopping $(1) (its data is about to be replaced, so no graceful shutdown)...$(RESET)"; \
+(cd $($(1)_STACK) && $(DOCKER_COMPOSE) kill $(1)) >/dev/null 2>&1 || true; \
 echo "$(CYAN)Restoring from $(2)...$(RESET)"; \
 docker rm -f oib-restore-$(1) >/dev/null 2>&1; \
 docker run --rm --name oib-restore-$(1) -v oib-$(1)-data:/data -v "$(abspath $(2))":/backup.tar.gz:ro $(BACKUP_IMAGE) \

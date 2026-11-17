@@ -603,7 +603,7 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
 - Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after.
   - This is a crash-consistent copy, not an application-coordinated one: no checkpoint or flush happens first.
   - `make test-backup` takes archives under write load, restores them, and checks that every log line Loki acknowledged before the freeze is back. Traces sent more than 10 s before the freeze must also be back. Traces from the last few seconds may be lost, as they would be in a crash: they can still be in Alloy's batch or in Tempo's newest, unfinished block.
-  - The freeze takes under a second, or about 10 s for a 90 MB Grafana volume. Pyroscope then reports not-ready for about a minute while it keeps running.
+  - The freeze takes under a second, or about 10 s for a 90 MB Grafana volume.
   - Requests arriving during a freeze wait.
 - Covers Prometheus, Loki, Tempo, Grafana and, when the profiling stack is installed, Pyroscope. The shared-services volumes (PostgreSQL, Redis) are not backed up.
 - An archive is written under a `.partial` name and renamed only when complete. A failed or interrupted backup unpauses the container and leaves no file behind. A container left paused by a killed backup is unpaused by the next one.
