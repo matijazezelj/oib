@@ -201,7 +201,7 @@ make test-load            # Run k6 load test
 make update               # Pull pinned images and recreate the core stacks
 make latest               # Run with :latest image tags (make install reverts)
 make logs                 # Tail logs from all core stacks
-make backup               # Back up Prometheus, Loki, Tempo and Grafana volumes
+make backup               # Back up all data volumes (each component is frozen briefly)
 make clean                # docker system prune -f for the whole Docker host
 make uninstall            # Remove core stacks and their data volumes
 ```

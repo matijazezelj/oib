@@ -26,11 +26,12 @@ _oib_completions() {
             start-services stop-services restart-services logs-services info-services \
             health doctor check-ports ps validate \
             demo demo-app demo-app-stop demo-traffic demo-examples \
-            test-load test-stress test-spike test-api \
+            test-load test-stress test-spike test-api test-backup test-upgrade \
             open disk-usage version bootstrap \
             update update-grafana update-logging update-metrics update-telemetry update-profiling latest clean \
-            backup backup-prometheus backup-loki backup-tempo backup-grafana \
-            restore restore-prometheus restore-loki restore-tempo restore-grafana \
+            backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
+            restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope \
+            migrate-grafana-volume \
             uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
             help"
         COMPREPLY=($(compgen -W "$targets" -- "$cur"))

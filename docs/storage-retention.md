@@ -222,12 +222,13 @@ make backup-prometheus
 make backup-loki
 make backup-tempo
 make backup-grafana
+make backup-pyroscope
 ```
 
 What `make backup` does and does not do:
 - Writes `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (use `make backup BACKUP_DIR=/path` for another directory). A component whose volume does not exist is skipped.
-- Copies the volumes while the services keep running, so a backup is not guaranteed to be consistent. Run `make stop` before backing up if you need a clean copy, then `make start`.
-- Does not cover `oib-pyroscope-data` or the shared-services PostgreSQL/Redis volumes.
+- Freezes each running component with `docker pause` while its volume is archived and unpauses it, so the copy is crash-consistent. The freeze is usually under a second (about 10 s for a 90 MB Grafana volume).
+- Does not cover the shared-services PostgreSQL/Redis volumes.
 
 ### Restore from Backup
 
@@ -235,11 +236,14 @@ What `make backup` does and does not do:
 # List available backups and the restore commands
 make restore
 
+# Restore everything from one backup run
+make restore-all STAMP=20240101_120000
+
 # Restore specific component (relative or absolute path)
 make restore-prometheus FILE=./backups/prometheus_20240101_120000.tar.gz
 ```
 
-Each `restore-*` target asks for confirmation, stops that service, deletes the current contents of its volume, extracts the archive and starts the service again. Targets: `restore-prometheus`, `restore-loki`, `restore-tempo`, `restore-grafana`.
+Each `restore-*` target asks for confirmation (`YES=1` skips it), checks that the archive is readable, stops that service, replaces the contents of its volume with the archive and starts the service again. Targets: `restore-prometheus`, `restore-loki`, `restore-tempo`, `restore-grafana`, `restore-pyroscope`. The component's stack must be installed. `make test-backup` verifies the whole backup → wipe → restore cycle on a clean host.
 
 ### Backup Schedule Recommendations
 
@@ -367,4 +371,6 @@ make backup-prometheus   # Prometheus only
 make backup-loki         # Loki only
 make backup-tempo        # Tempo only
 make backup-grafana      # Grafana only
+make backup-pyroscope    # Pyroscope only (if installed)
+make restore-all STAMP=YYYYMMDD_HHMMSS  # Restore one backup run
 ```

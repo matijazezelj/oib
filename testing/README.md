@@ -2,6 +2,8 @@
 
 Load test your applications with [k6](https://k6.io/) and visualize the results in Grafana.
 
+For the backup/restore and upgrade acceptance tests (`make test-backup`, `make test-upgrade`), see [acceptance/README.md](acceptance/README.md).
+
 ## Quick Start
 
 Needs the metrics stack running (`make install` or `make install-metrics`): k6 remote-writes its results to `http://oib-prometheus:9090/api/v1/write`. The make targets create `oib-network` if it is missing, run k6 in a throwaway `oib-k6` container (`--rm`), and all target Grafana (`http://oib-grafana:3000`) unless the script is pointed elsewhere.

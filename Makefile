@@ -7,9 +7,9 @@
         logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
         network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling latest \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
-        test-load test-stress test-spike test-api \
-        backup backup-prometheus backup-loki backup-tempo backup-grafana \
-        restore restore-prometheus restore-loki restore-tempo restore-grafana
+        test-load test-stress test-spike test-api test-backup test-upgrade \
+        backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
+        migrate-grafana-volume restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope
 
 # Colors - real ESC bytes, so plain `echo` renders them under both dash and bash
 CYAN := $(shell printf '\033[36m')
@@ -62,6 +62,10 @@ CORE_PORTS := $(GRAFANA_PORT) $(LOKI_PORT) $(ALLOY_LOGGING_PORT) $(PROMETHEUS_PO
               $(TEMPO_HTTP_PORT) $(TEMPO_GRPC_PORT) $(OTEL_GRPC_PORT) \
               $(OTEL_HTTP_PORT) $(ALLOY_TELEMETRY_PORT)
 
+# Confirmation prompt; YES=1 skips it (for scripts and tests).
+# Use as a shell command: @$(call confirm,Question?)
+confirm = if [ "$(YES)" != "1" ]; then printf "$(1) [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac; fi
+
 # Debug mode - set DEBUG=1 to enable verbose output
 DEBUG ?= 0
 ifeq ($(DEBUG),1)
@@ -90,6 +94,9 @@ help: ## Show this help message
 	@echo "$(CYAN)Load Testing:$(RESET)"
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)Acceptance Tests (delete all OIB data):$(RESET)"
+	@grep -E '^(test-backup|test-upgrade):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
@@ -97,7 +104,7 @@ help: ## Show this help message
 	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Backup & Restore:$(RESET)"
-	@grep -E '^(backup|restore)[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(backup|restore|restore-all):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Cleanup:$(RESET)"
 	@grep -E '^uninstall[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -188,34 +195,64 @@ install: ## Install all observability stacks
 
 install-grafana: network ## Install Grafana (unified dashboard)
 	@echo "$(CYAN)📊 Installing Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) up -d
+	@$(MAKE) --no-print-directory migrate-grafana-volume
+	@cd grafana && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Grafana installed$(RESET)"
+
+# Releases before 1.1.0 let Compose name Grafana's volume oib-grafana_oib-grafana-data;
+# since 1.1.0 it is oib-grafana-data. Move the data over so upgrades keep it.
+OLD_GRAFANA_VOLUME := oib-grafana_oib-grafana-data
+# Written into the old volume after a move, so later runs stay quiet
+GRAFANA_MIGRATED_MARKER := .oib-migrated-to-oib-grafana-data
+
+migrate-grafana-volume: ## Move Grafana data from the pre-1.1.0 volume (FORCE=1 replaces existing data)
+	@if ! docker volume inspect $(OLD_GRAFANA_VOLUME) >/dev/null 2>&1; then exit 0; fi; \
+	if [ "$(FORCE)" != "1" ] && docker run --rm -v $(OLD_GRAFANA_VOLUME):/from:ro $(BACKUP_IMAGE) test -f /from/$(GRAFANA_MIGRATED_MARKER); then exit 0; fi; \
+	if docker volume inspect oib-grafana-data >/dev/null 2>&1 && [ "$(FORCE)" != "1" ]; then \
+		echo "$(YELLOW)!$(RESET) Found Grafana data from before 1.1.0 in volume $(OLD_GRAFANA_VOLUME)."; \
+		echo "  The current Grafana uses oib-grafana-data. To bring back the old dashboards, users and"; \
+		echo "  settings (replacing the current ones), run: $(GREEN)make migrate-grafana-volume FORCE=1$(RESET)"; \
+		echo "  To keep the current data instead: docker volume rm $(OLD_GRAFANA_VOLUME)"; \
+		exit 0; \
+	fi; \
+	if docker volume inspect oib-grafana-data >/dev/null 2>&1; then \
+		echo "$(CYAN)Backing up current Grafana data before replacing it...$(RESET)"; \
+		$(MAKE) --no-print-directory backup-grafana || exit 1; \
+	fi; \
+	echo "$(CYAN)Moving Grafana data from $(OLD_GRAFANA_VOLUME) to oib-grafana-data...$(RESET)"; \
+	docker rm -f oib-grafana >/dev/null 2>&1 || true; \
+	docker volume create oib-grafana-data >/dev/null && \
+	docker run --rm -v $(OLD_GRAFANA_VOLUME):/from:ro -v oib-grafana-data:/to $(BACKUP_IMAGE) \
+		sh -c "find /to -mindepth 1 -delete && cp -a /from/. /to/ && rm -f /to/$(GRAFANA_MIGRATED_MARKER)" || { echo "$(RED)✗ Grafana volume migration failed$(RESET)"; exit 1; }; \
+	docker run --rm -v $(OLD_GRAFANA_VOLUME):/from $(BACKUP_IMAGE) touch /from/$(GRAFANA_MIGRATED_MARKER) || true; \
+	echo "$(GREEN)✓$(RESET) Grafana data moved. The old volume is kept; remove it once you are happy:"; \
+	echo "  docker volume rm $(OLD_GRAFANA_VOLUME)"
 
 install-logging: network ## Install logging stack (Loki + Alloy)
 	@echo "$(CYAN)📋 Installing Logging Stack...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) up -d
+	@cd logging && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Logging stack installed$(RESET)"
 
 install-metrics: network ## Install metrics stack (Prometheus + Exporters)
 	@echo "$(CYAN)📊 Installing Metrics Stack...$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) up -d
+	@cd metrics && p=""; if docker inspect oib-pushgateway >/dev/null 2>&1; then p="--profile pushgateway"; fi; $(DOCKER_COMPOSE) $$p up -d --remove-orphans
 	@echo "$(GREEN)✓ Metrics stack installed$(RESET)"
 
 install-telemetry: network ## Install telemetry stack (Tempo + Alloy)
 	@echo "$(CYAN)🔭 Installing Telemetry Stack...$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) up -d
+	@cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Telemetry stack installed$(RESET)"
 
 install-profiling: network ## Install profiling stack (Pyroscope) - optional
 	@echo "$(CYAN)🔥 Installing Profiling Stack...$(RESET)"
-	@cd profiling && $(DOCKER_COMPOSE) up -d
+	@cd profiling && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Profiling stack installed$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Note: Restart Grafana to enable Pyroscope datasource: make restart-grafana$(RESET)"
 
 install-services: network ## Install shared services (PostgreSQL + Redis) - optional
 	@echo "$(CYAN)🗄️  Installing Shared Services...$(RESET)"
-	@cd services && $(DOCKER_COMPOSE) up -d
+	@cd services && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Shared services installed$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Available services:$(RESET)"
@@ -296,7 +333,7 @@ restart-services: ## Restart shared services (PostgreSQL + Redis)
 uninstall: ## Remove all stacks and volumes (with confirmation)
 	@echo "$(RED)$(BOLD)⚠️  WARNING: This will delete ALL data (logs, metrics, traces)!$(RESET)"
 	@echo ""
-	@printf "Are you sure you want to uninstall? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
+	@$(call confirm,Are you sure you want to uninstall?)
 	@$(MAKE) --no-print-directory uninstall-grafana
 	@$(MAKE) --no-print-directory uninstall-logging
 	@$(MAKE) --no-print-directory uninstall-metrics
@@ -306,32 +343,32 @@ uninstall: ## Remove all stacks and volumes (with confirmation)
 
 uninstall-grafana: ## Remove Grafana and volumes
 	@echo "$(YELLOW)Removing Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) down -v
+	@cd grafana && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓ Grafana removed$(RESET)"
 
 uninstall-logging: ## Remove logging stack and volumes
 	@echo "$(YELLOW)Removing logging stack...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) down -v
+	@cd logging && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓ Logging stack removed$(RESET)"
 
 uninstall-metrics: ## Remove metrics stack and volumes
 	@echo "$(YELLOW)Removing metrics stack...$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) down -v
+	@cd metrics && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓ Metrics stack removed$(RESET)"
 
 uninstall-telemetry: ## Remove telemetry stack and volumes
 	@echo "$(YELLOW)Removing telemetry stack...$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) down -v
+	@cd telemetry && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓ Telemetry stack removed$(RESET)"
 
 uninstall-profiling: ## Remove profiling stack and volumes
 	@echo "$(YELLOW)Removing profiling stack...$(RESET)"
-	@cd profiling && $(DOCKER_COMPOSE) down -v
+	@cd profiling && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓ Profiling stack removed$(RESET)"
 
 uninstall-services: ## Remove shared services and volumes (PostgreSQL + Redis)
 	@echo "$(YELLOW)Removing shared services...$(RESET)"
-	@cd services && $(DOCKER_COMPOSE) down -v
+	@cd services && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓ Shared services removed$(RESET)"
 
 # ==================== Status ====================
@@ -729,10 +766,11 @@ update: ## Pull pinned images and recreate the core stacks
 	@cd telemetry && $(DOCKER_COMPOSE) pull
 	@echo ""
 	@echo "$(CYAN)Recreating stacks with new images...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) up -d
-	@cd metrics && $(DOCKER_COMPOSE) up -d
-	@cd telemetry && $(DOCKER_COMPOSE) up -d
-	@cd grafana && $(DOCKER_COMPOSE) up -d
+	@cd logging && $(DOCKER_COMPOSE) up -d --remove-orphans
+	@cd metrics && p=""; if docker inspect oib-pushgateway >/dev/null 2>&1; then p="--profile pushgateway"; fi; $(DOCKER_COMPOSE) $$p up -d --remove-orphans
+	@cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans
+	@$(MAKE) --no-print-directory migrate-grafana-volume
+	@cd grafana && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo ""
 	@echo "$(GREEN)✓ All stacks updated$(RESET)"
 
@@ -740,35 +778,36 @@ update-grafana: ## Pull latest Grafana image and restart
 	@echo "$(CYAN)Pulling latest Grafana image...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) pull
 	@echo "$(CYAN)Restarting Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) up -d
+	@$(MAKE) --no-print-directory migrate-grafana-volume
+	@cd grafana && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Grafana updated$(RESET)"
 
 update-logging: ## Pull latest logging images (Loki, Alloy) and restart
 	@echo "$(CYAN)Pulling latest logging images...$(RESET)"
 	@cd logging && $(DOCKER_COMPOSE) pull
 	@echo "$(CYAN)Restarting logging stack...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) up -d
+	@cd logging && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Logging stack updated$(RESET)"
 
 update-metrics: ## Pull latest metrics images (Prometheus, exporters) and restart
 	@echo "$(CYAN)Pulling latest metrics images...$(RESET)"
 	@cd metrics && $(DOCKER_COMPOSE) pull
 	@echo "$(CYAN)Restarting metrics stack...$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) up -d
+	@cd metrics && p=""; if docker inspect oib-pushgateway >/dev/null 2>&1; then p="--profile pushgateway"; fi; $(DOCKER_COMPOSE) $$p up -d --remove-orphans
 	@echo "$(GREEN)✓ Metrics stack updated$(RESET)"
 
 update-telemetry: ## Pull latest telemetry images (Tempo, Alloy) and restart
 	@echo "$(CYAN)Pulling latest telemetry images...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) pull
 	@echo "$(CYAN)Restarting telemetry stack...$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) up -d
+	@cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Telemetry stack updated$(RESET)"
 
 update-profiling: ## Pull latest profiling images (Pyroscope) and restart
 	@echo "$(CYAN)Pulling latest profiling images...$(RESET)"
 	@cd profiling && $(DOCKER_COMPOSE) pull
 	@echo "$(CYAN)Restarting profiling stack...$(RESET)"
-	@cd profiling && $(DOCKER_COMPOSE) up -d
+	@cd profiling && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Profiling stack updated$(RESET)"
 
 latest: ## Pull and run :latest versions of all images
@@ -800,12 +839,13 @@ latest: ## Pull and run :latest versions of all images
 	@cd telemetry && TEMPO_VERSION=latest ALLOY_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
 	@echo "$(CYAN)  Profiling stack...$(RESET)"
 	@if docker inspect oib-pyroscope >/dev/null 2>&1; then \
-		cd profiling && PYROSCOPE_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true; \
+		cd profiling && PYROSCOPE_VERSION=latest $(DOCKER_COMPOSE) up -d --remove-orphans --quiet-pull 2>&1 || true; \
 	else \
 		echo "    (not installed, skipped)"; \
 	fi
 	@echo "$(CYAN)  Grafana...$(RESET)"
-	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d --quiet-pull 2>&1 || true
+	@$(MAKE) --no-print-directory migrate-grafana-volume
+	@cd grafana && GRAFANA_VERSION=latest $(DOCKER_COMPOSE) up -d --remove-orphans --quiet-pull 2>&1 || true
 	@echo ""
 	@echo "$(CYAN)Waiting for services to be healthy...$(RESET)"
 	@sleep 10
@@ -1017,7 +1057,7 @@ demo-app: ## Start demo app with PostgreSQL & Redis (realistic traces)
 
 demo-app-stop: ## Stop demo app and clean up
 	@echo "$(CYAN)Stopping Demo App...$(RESET)"
-	@cd examples/demo-app && $(DOCKER_COMPOSE) down -v
+	@cd examples/demo-app && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
 	@echo "$(GREEN)✓$(RESET) Demo app stopped"
 
 demo-traffic: ## Generate traffic to demo app for realistic traces
@@ -1105,181 +1145,139 @@ test-api: network ## Run k6 API load test
 	@echo ""
 	@echo "$(GREEN)✓ API test complete. Check the Request Latency dashboard in Grafana.$(RESET)"
 
+# ==================== Acceptance Tests ====================
+# Both tests need a host without an OIB install: they delete every OIB volume.
+
+test-backup: ## Backup -> wipe -> restore round trip, verifies the data comes back
+	@testing/acceptance/backup-roundtrip.sh
+
+test-upgrade: ## Install FROM=<tag> (default: latest release), upgrade, verify data
+	@testing/acceptance/upgrade.sh $(FROM)
+
 # ==================== Backup & Restore ====================
+#
+# Every component keeps its data in the volume oib-<component>-data and runs
+# as the container oib-<component> in the stack directory below.
+# Each running component is frozen with `docker pause` while its volume is
+# archived, so the copy is crash-consistent (what the databases' write-ahead logs
+# are built to recover from); it is unpaused right after, usually within a second.
 
 BACKUP_DIR := ./backups
 TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
+BACKUP_COMPONENTS := prometheus loki tempo grafana pyroscope
+BACKUP_IMAGE := alpine:3.20
+prometheus_STACK := metrics
+loki_STACK := logging
+tempo_STACK := telemetry
+grafana_STACK := grafana
+pyroscope_STACK := profiling
+HOST_UID := $(shell id -u)
+HOST_GID := $(shell id -g)
 
-backup: ## Backup all OIB data volumes
+# $(call backup_volume,<component>)
+define backup_volume
+mkdir -p "$(BACKUP_DIR)"; \
+echo "$(CYAN)Backing up $(1)...$(RESET)"; \
+if ! docker volume inspect oib-$(1)-data >/dev/null 2>&1; then \
+	echo "  $(YELLOW)!$(RESET) oib-$(1)-data volume not found (skipped)"; exit 0; \
+fi; \
+running=$$(docker ps -q -f name=^oib-$(1)$$ -f status=running); \
+if [ -n "$$running" ]; then docker pause oib-$(1) >/dev/null || exit 1; \
+	trap 'docker unpause oib-$(1) >/dev/null 2>&1; exit 130' INT TERM; fi; \
+out="$(1)_$(TIMESTAMP).tar.gz"; \
+docker run --rm -v oib-$(1)-data:/data:ro -v "$(abspath $(BACKUP_DIR))":/backup $(BACKUP_IMAGE) \
+	sh -c "tar czf /backup/$$out -C /data . && chown $(HOST_UID):$(HOST_GID) /backup/$$out"; rc=$$?; \
+if [ -n "$$running" ]; then docker unpause oib-$(1) >/dev/null; fi; \
+if [ $$rc -ne 0 ]; then echo "  $(RED)✗$(RESET) $(1) backup failed"; exit $$rc; fi; \
+echo "  $(GREEN)✓$(RESET) $(1): $(BACKUP_DIR)/$$out"
+endef
+
+# $(call restore_volume,<component>,<file>)
+define restore_volume
+if [ -z "$(2)" ]; then \
+	echo "$(RED)Error: FILE parameter required$(RESET)"; \
+	echo "Usage: make restore-$(1) FILE=$(BACKUP_DIR)/$(1)_YYYYMMDD_HHMMSS.tar.gz"; exit 1; \
+fi; \
+if [ ! -f "$(2)" ]; then echo "$(RED)Error: File not found: $(2)$(RESET)"; exit 1; fi; \
+if ! docker inspect oib-$(1) >/dev/null 2>&1; then \
+	echo "$(RED)Error: container oib-$(1) not found. Install the $($(1)_STACK) stack first.$(RESET)"; exit 1; \
+fi; \
+echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing $(1) data!$(RESET)"; \
+$(call confirm,Are you sure?); \
+echo "$(CYAN)Stopping $(1)...$(RESET)"; \
+(cd $($(1)_STACK) && $(DOCKER_COMPOSE) stop $(1)) >/dev/null 2>&1 || true; \
+echo "$(CYAN)Restoring from $(2)...$(RESET)"; \
+docker run --rm -v oib-$(1)-data:/data -v "$(abspath $(2))":/backup.tar.gz:ro $(BACKUP_IMAGE) \
+	sh -c "tar tzf /backup.tar.gz >/dev/null && find /data -mindepth 1 -delete && tar xzf /backup.tar.gz -C /data" \
+	|| { echo "$(RED)✗ Restore failed (archive unreadable or extraction error)$(RESET)"; (cd $($(1)_STACK) && $(DOCKER_COMPOSE) start $(1)) >/dev/null 2>&1; exit 1; }; \
+echo "$(CYAN)Starting $(1)...$(RESET)"; \
+(cd $($(1)_STACK) && $(DOCKER_COMPOSE) start $(1)) >/dev/null; \
+echo "$(GREEN)✓ $(1) restored from $(2)$(RESET)"
+endef
+
+backup: ## Backup all OIB data volumes (each component is frozen briefly)
 	@echo ""
 	@echo "$(BOLD)💾 Backing up all OIB data...$(RESET)"
 	@echo ""
-	@mkdir -p $(BACKUP_DIR)
-	@$(MAKE) --no-print-directory backup-prometheus
-	@$(MAKE) --no-print-directory backup-loki
-	@$(MAKE) --no-print-directory backup-tempo
-	@$(MAKE) --no-print-directory backup-grafana
+	@for c in $(BACKUP_COMPONENTS); do \
+		$(MAKE) --no-print-directory backup-$$c TIMESTAMP=$(TIMESTAMP) || exit 1; \
+	done
 	@echo ""
-	@echo "$(GREEN)$(BOLD)✓ All backups complete!$(RESET)"
-	@echo ""
-	@echo "Backup location: $(YELLOW)$(BACKUP_DIR)/$(RESET)"
-	@ls -lh $(BACKUP_DIR)/*.tar.gz 2>/dev/null | tail -10
+	@echo "$(GREEN)$(BOLD)✓ All backups complete!$(RESET)  Restore with: $(YELLOW)make restore-all STAMP=$(TIMESTAMP)$(RESET)"
+	@ls -lh $(BACKUP_DIR)/*_$(TIMESTAMP).tar.gz 2>/dev/null
 	@echo ""
 
 backup-prometheus: ## Backup Prometheus data
-	@mkdir -p $(BACKUP_DIR)
-	@echo "$(CYAN)Backing up Prometheus...$(RESET)"
-	@if docker volume inspect oib-prometheus-data >/dev/null 2>&1; then \
-		docker run --rm \
-			-v oib-prometheus-data:/data:ro \
-			-v "$(abspath $(BACKUP_DIR))":/backup \
-			alpine tar czf /backup/prometheus_$(TIMESTAMP).tar.gz -C /data . && \
-		echo "  $(GREEN)✓$(RESET) Prometheus backup: $(BACKUP_DIR)/prometheus_$(TIMESTAMP).tar.gz"; \
-	else \
-		echo "  $(YELLOW)!$(RESET) Prometheus volume not found (skipped)"; \
-	fi
+	@$(call backup_volume,prometheus)
 
 backup-loki: ## Backup Loki data
-	@mkdir -p $(BACKUP_DIR)
-	@echo "$(CYAN)Backing up Loki...$(RESET)"
-	@if docker volume inspect oib-loki-data >/dev/null 2>&1; then \
-		docker run --rm \
-			-v oib-loki-data:/data:ro \
-			-v "$(abspath $(BACKUP_DIR))":/backup \
-			alpine tar czf /backup/loki_$(TIMESTAMP).tar.gz -C /data . && \
-		echo "  $(GREEN)✓$(RESET) Loki backup: $(BACKUP_DIR)/loki_$(TIMESTAMP).tar.gz"; \
-	else \
-		echo "  $(YELLOW)!$(RESET) Loki volume not found (skipped)"; \
-	fi
+	@$(call backup_volume,loki)
 
 backup-tempo: ## Backup Tempo data
-	@mkdir -p $(BACKUP_DIR)
-	@echo "$(CYAN)Backing up Tempo...$(RESET)"
-	@if docker volume inspect oib-tempo-data >/dev/null 2>&1; then \
-		docker run --rm \
-			-v oib-tempo-data:/data:ro \
-			-v "$(abspath $(BACKUP_DIR))":/backup \
-			alpine tar czf /backup/tempo_$(TIMESTAMP).tar.gz -C /data . && \
-		echo "  $(GREEN)✓$(RESET) Tempo backup: $(BACKUP_DIR)/tempo_$(TIMESTAMP).tar.gz"; \
-	else \
-		echo "  $(YELLOW)!$(RESET) Tempo volume not found (skipped)"; \
-	fi
+	@$(call backup_volume,tempo)
 
 backup-grafana: ## Backup Grafana data
-	@mkdir -p $(BACKUP_DIR)
-	@echo "$(CYAN)Backing up Grafana...$(RESET)"
-	@if docker volume inspect oib-grafana-data >/dev/null 2>&1; then \
-		docker run --rm \
-			-v oib-grafana-data:/data:ro \
-			-v "$(abspath $(BACKUP_DIR))":/backup \
-			alpine tar czf /backup/grafana_$(TIMESTAMP).tar.gz -C /data . && \
-		echo "  $(GREEN)✓$(RESET) Grafana backup: $(BACKUP_DIR)/grafana_$(TIMESTAMP).tar.gz"; \
-	else \
-		echo "  $(YELLOW)!$(RESET) Grafana volume not found (skipped)"; \
-	fi
+	@$(call backup_volume,grafana)
 
-restore: ## Restore all OIB data (interactive)
+backup-pyroscope: ## Backup Pyroscope data (if the profiling stack is installed)
+	@$(call backup_volume,pyroscope)
+
+restore: ## List backups and show how to restore them
 	@echo ""
 	@echo "$(BOLD)📥 Restore OIB Data$(RESET)"
 	@echo ""
 	@echo "$(YELLOW)Available backups:$(RESET)"
 	@ls -lh $(BACKUP_DIR)/*.tar.gz 2>/dev/null || echo "  No backups found in $(BACKUP_DIR)/"
 	@echo ""
-	@echo "$(CYAN)To restore a specific component, use:$(RESET)"
-	@echo "  make restore-prometheus FILE=./backups/prometheus_YYYYMMDD_HHMMSS.tar.gz"
-	@echo "  make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz"
-	@echo "  make restore-tempo FILE=./backups/tempo_YYYYMMDD_HHMMSS.tar.gz"
-	@echo "  make restore-grafana FILE=./backups/grafana_YYYYMMDD_HHMMSS.tar.gz"
+	@echo "$(CYAN)Restore everything from one backup run:$(RESET)"
+	@echo "  make restore-all STAMP=YYYYMMDD_HHMMSS"
+	@echo "$(CYAN)Or a single component:$(RESET)"
+	@for c in $(BACKUP_COMPONENTS); do echo "  make restore-$$c FILE=$(BACKUP_DIR)/$${c}_YYYYMMDD_HHMMSS.tar.gz"; done
+	@echo "$(CYAN)Add YES=1 to skip the confirmation prompts.$(RESET)"
 	@echo ""
 
+restore-all: ## Restore every component from one backup run (STAMP=YYYYMMDD_HHMMSS)
+	@if [ -z "$(STAMP)" ]; then echo "$(RED)Error: STAMP parameter required, e.g. STAMP=20260101_120000$(RESET)"; exit 1; fi
+	@ls $(BACKUP_DIR)/*_$(STAMP).tar.gz >/dev/null 2>&1 || { echo "$(RED)Error: no backups matching $(BACKUP_DIR)/*_$(STAMP).tar.gz$(RESET)"; exit 1; }
+	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing data of every component in this backup!$(RESET)"
+	@$(call confirm,Are you sure?)
+	@for c in $(BACKUP_COMPONENTS); do \
+		f="$(BACKUP_DIR)/$${c}_$(STAMP).tar.gz"; \
+		if [ -f "$$f" ]; then $(MAKE) --no-print-directory restore-$$c FILE="$$f" YES=1 || exit 1; \
+		else echo "$(YELLOW)!$(RESET) no $$c backup in this run (skipped)"; fi; \
+	done
+
 restore-prometheus: ## Restore Prometheus data (FILE=path/to/backup.tar.gz)
-	@if [ -z "$(FILE)" ]; then \
-		echo "$(RED)Error: FILE parameter required$(RESET)"; \
-		echo "Usage: make restore-prometheus FILE=./backups/prometheus_YYYYMMDD_HHMMSS.tar.gz"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(FILE)" ]; then \
-		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
-		exit 1; \
-	fi
-	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Prometheus data!$(RESET)"
-	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
-	@echo "$(CYAN)Stopping Prometheus...$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) stop prometheus 2>/dev/null || true
-	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
-	@docker run --rm \
-		-v oib-prometheus-data:/data \
-		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
-		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
-	@echo "$(CYAN)Starting Prometheus...$(RESET)"
-	@cd metrics && $(DOCKER_COMPOSE) start prometheus
-	@echo "$(GREEN)✓ Prometheus restored from $(FILE)$(RESET)"
+	@$(call restore_volume,prometheus,$(FILE))
 
 restore-loki: ## Restore Loki data (FILE=path/to/backup.tar.gz)
-	@if [ -z "$(FILE)" ]; then \
-		echo "$(RED)Error: FILE parameter required$(RESET)"; \
-		echo "Usage: make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(FILE)" ]; then \
-		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
-		exit 1; \
-	fi
-	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Loki data!$(RESET)"
-	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
-	@echo "$(CYAN)Stopping Loki...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) stop loki 2>/dev/null || true
-	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
-	@docker run --rm \
-		-v oib-loki-data:/data \
-		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
-		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
-	@echo "$(CYAN)Starting Loki...$(RESET)"
-	@cd logging && $(DOCKER_COMPOSE) start loki
-	@echo "$(GREEN)✓ Loki restored from $(FILE)$(RESET)"
+	@$(call restore_volume,loki,$(FILE))
 
 restore-tempo: ## Restore Tempo data (FILE=path/to/backup.tar.gz)
-	@if [ -z "$(FILE)" ]; then \
-		echo "$(RED)Error: FILE parameter required$(RESET)"; \
-		echo "Usage: make restore-tempo FILE=./backups/tempo_YYYYMMDD_HHMMSS.tar.gz"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(FILE)" ]; then \
-		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
-		exit 1; \
-	fi
-	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Tempo data!$(RESET)"
-	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
-	@echo "$(CYAN)Stopping Tempo...$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) stop tempo 2>/dev/null || true
-	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
-	@docker run --rm \
-		-v oib-tempo-data:/data \
-		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
-		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
-	@echo "$(CYAN)Starting Tempo...$(RESET)"
-	@cd telemetry && $(DOCKER_COMPOSE) start tempo
-	@echo "$(GREEN)✓ Tempo restored from $(FILE)$(RESET)"
+	@$(call restore_volume,tempo,$(FILE))
 
 restore-grafana: ## Restore Grafana data (FILE=path/to/backup.tar.gz)
-	@if [ -z "$(FILE)" ]; then \
-		echo "$(RED)Error: FILE parameter required$(RESET)"; \
-		echo "Usage: make restore-grafana FILE=./backups/grafana_YYYYMMDD_HHMMSS.tar.gz"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(FILE)" ]; then \
-		echo "$(RED)Error: File not found: $(FILE)$(RESET)"; \
-		exit 1; \
-	fi
-	@echo "$(YELLOW)$(BOLD)⚠️  WARNING: This will overwrite existing Grafana data!$(RESET)"
-	@printf "Are you sure? [y/N] "; read confirm; case "$$confirm" in [yY]) ;; *) echo "Cancelled."; exit 1 ;; esac
-	@echo "$(CYAN)Stopping Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) stop grafana 2>/dev/null || true
-	@echo "$(CYAN)Restoring from $(FILE)...$(RESET)"
-	@docker run --rm \
-		-v oib-grafana-data:/data \
-		-v "$(abspath $(FILE))":/backup.tar.gz:ro \
-		alpine sh -c "rm -rf /data/* && tar xzf /backup.tar.gz -C /data"
-	@echo "$(CYAN)Starting Grafana...$(RESET)"
-	@cd grafana && $(DOCKER_COMPOSE) start grafana
-	@echo "$(GREEN)✓ Grafana restored from $(FILE)$(RESET)"
+	@$(call restore_volume,grafana,$(FILE))
+
+restore-pyroscope: ## Restore Pyroscope data (FILE=path/to/backup.tar.gz)
+	@$(call restore_volume,pyroscope,$(FILE))

@@ -289,26 +289,27 @@ Create a cron job for regular backups:
 0 2 * * * root cd /path/to/oib && make backup >> /var/log/oib-backup.log 2>&1
 ```
 
-Limits of `make backup` to plan around:
-- It covers the Prometheus, Loki, Tempo and Grafana volumes only, not `oib-pyroscope-data` or the shared PostgreSQL/Redis volumes.
-- It archives the volumes while the services are running, so a backup is not guaranteed to be consistent. For a consistent copy, run `make stop`, `make backup`, `make start` in the cron job, and accept the gap in collection.
-- Files are written to `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` and are never pruned; rotate them yourself.
+What `make backup` does, to plan around:
+- It covers Prometheus, Loki, Tempo, Grafana and (if installed) Pyroscope, not the shared PostgreSQL/Redis volumes.
+- It freezes each component with `docker pause` while archiving its volume, so backups are crash-consistent; the freeze is usually under a second (about 10 s for a 90 MB Grafana volume).
+- Files are written to `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz`, owned by the cron user, and are never pruned; rotate them yourself.
 
 ### Backup Verification
 
-Periodically test restores:
+`make test-backup` runs the full cycle on a disposable host (a CI runner or a throwaway VM, **not** the production host, since it deletes all OIB volumes): it writes known logs, a trace, a profile and a Grafana dashboard, runs `make backup`, wipes every volume, reinstalls, runs `make restore-all` and checks that the data and the stack work again. CI runs it on every change to the stacks ([testing/acceptance](../testing/acceptance/README.md)).
+
+To check your own archives without touching the live install, extract one into a scratch volume:
 
 ```bash
-# Test restore to a temporary environment
-make backup
 docker volume create oib-prometheus-test
 docker run --rm \
   -v "$PWD/backups/prometheus_YYYYMMDD_HHMMSS.tar.gz":/backup.tar.gz:ro \
   -v oib-prometheus-test:/data \
-  alpine tar xzf /backup.tar.gz -C /data
+  alpine:3.20 tar xzf /backup.tar.gz -C /data
+docker volume rm oib-prometheus-test
 ```
 
-`make restore-<component> FILE=...` restores into the live volume: it asks for confirmation, stops the service, deletes the existing data, extracts the archive and starts the service.
+`make restore-<component> FILE=...` restores into the live volume: it asks for confirmation (`YES=1` skips it), checks the archive is readable, stops the service, replaces the existing data, and starts the service. `make restore-all STAMP=YYYYMMDD_HHMMSS` does this for every component of one backup run.
 
 ### Off-site Backup
 
