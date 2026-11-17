@@ -262,7 +262,13 @@ seed_run() {
   retry 60 has_log "$run" || die "seeded log line is not readable"
   retry 90 has_trace_by_id "$run" "$trace" || die "seeded trace is not readable"
   retry 30 has_dashboard "$run" || die "seeded dashboard is not readable"
-  [ "$prof" = with-profiling ] && { retry 90 has_profile "$run" || die "seeded profile is not readable"; }
+  if [ "$prof" = with-profiling ]; then
+    # On a brand-new Pyroscope the first profile takes about a minute to become
+    # queryable (more on slow CI runners); later ones take about a second.
+    local tq; tq=$(date +%s)
+    retry "${PROFILE_TIMEOUT:-240}" has_profile "$run" || die "seeded profile is not readable after ${PROFILE_TIMEOUT:-240}s"
+    log "seeded profile readable after $(( $(date +%s) - tq ))s"
+  fi
   log "all seeded data readable after $(( $(date +%s) - t0 ))s"
   sleep 2
   cat >"$state" <<EOF
