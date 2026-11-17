@@ -32,7 +32,8 @@ make restart-grafana
 make status
 
 # On a brand-new install the first profile takes about a minute to become
-# queryable; after that, profiles show up within a second or two.
+# queryable (longer on a slow host); after that, profiles show up within a
+# second or two.
 
 # Show the endpoints to configure in your app
 make info-profiling
