@@ -4,17 +4,19 @@ name: acceptance
 # trip and an upgrade from each earlier release. See testing/acceptance/README.md.
 
 on:
+  # Run on every change except pure documentation, so new scripts, configs or
+  # directories are covered without having to remember to list them here.
   pull_request:
-    paths:
-      - '**/compose.yaml'
-      - '**/config/**'
-      - 'grafana/provisioning/**'
-      - 'Makefile'
-      - '.env.example'
-      - 'testing/acceptance/**'
-      - '.github/workflows/acceptance.yml'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'completions/**'
   push:
     branches: [main]
+  # Weekly, to notice registry-side changes (moved or deleted image tags).
+  schedule:
+    - cron: '17 4 * * 1'
   workflow_dispatch:
 
 permissions:

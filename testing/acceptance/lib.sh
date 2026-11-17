@@ -71,7 +71,8 @@ guard_clean_host() {
   if [ -n "$found" ] && [ "${OIB_TEST_FORCE:-0}" != 1 ]; then
     printf '%s\n' "$found" | sed 's/^/    /' >&2
     die "OIB containers or volumes already exist (listed above). These tests DELETE all OIB data.
-  Run them on a host without an OIB install, or set OIB_TEST_FORCE=1 to wipe it."
+  Run them isolated in Docker-in-Docker instead: make test-backup ISOLATED=1 (or test-upgrade).
+  To wipe this install and run here anyway, set OIB_TEST_FORCE=1."
   fi
 }
 
