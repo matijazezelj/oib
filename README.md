@@ -312,9 +312,10 @@ make backup               # Back up all data volumes (each component is frozen b
 make restore              # List backups and show restore commands
 make restore-all STAMP=…  # Restore everything from one backup run
 
-# Acceptance tests (need a host WITHOUT an OIB install; they delete all OIB data)
-make test-backup          # backup -> wipe -> restore round trip with data checks
-make test-upgrade FROM=v1.1.0  # install an older release, upgrade, check data and function
+# Acceptance tests (ISOLATED=1 runs them in Docker-in-Docker; without it they need a
+# host without an OIB install, because they delete all OIB data)
+make test-backup ISOLATED=1            # backup -> wipe -> restore round trip with data checks
+make test-upgrade FROM=v1.1.0 ISOLATED=1  # install an older release, upgrade, check data and function
 
 # Cleanup
 make uninstall            # Remove core stacks, their volumes and oib-network (with confirmation)
@@ -564,7 +565,8 @@ See [docs/storage-retention.md](docs/storage-retention.md) for sizing and tuning
 ```bash
 make backup                 # 1. consistent backup first (see below)
 git pull                    # 2. new release (or: git checkout vX.Y.Z)
-make update                 # 3. pull the pinned images and recreate the core stacks
+make migrate-tempo          # 3. only when coming from Tempo 2 (v1.0.0); a no-op otherwise
+make update                 # 4. pull the pinned images and recreate the core stacks
 make update-profiling       #    only if the profiling stack is installed
 make health
 ```
@@ -576,9 +578,14 @@ What survives an upgrade is checked in CI on every change to the stacks (`make t
 | Upgrading from | Logs | Metrics | Traces | Profiles | Grafana dashboards/users |
 |---|---|---|---|---|---|
 | v1.1.0 | kept | kept | kept | kept | kept |
-| v1.0.0 | kept | kept | **recent traces lost** (Tempo 2 → 3) | kept | kept (volume migrated) |
+| v1.0.0 | kept | kept | kept, with `make migrate-tempo` (see below) | kept | kept (volume migrated) |
 
-- **Tempo 2 → 3** (upgrading from v1.0.0): Tempo 3 ignores the Tempo 2 write-ahead log, so traces not yet flushed to a block are lost. Older, flushed traces can still be opened by trace ID but do not show up in search; they expire with the 3-day retention.
+- **Tempo 2 → 3** (upgrading from v1.0.0) is a migration, not an image refresh:
+  - Tempo 3 ignores Tempo 2's write-ahead log, so recreating the container drops every trace Tempo 2 has not flushed to disk yet, which can be up to the last 5 minutes.
+  - `make install`, `make update`, `make update-telemetry` and `make latest` therefore refuse to run while Tempo 2 is installed.
+  - `make migrate-tempo` flushes Tempo 2 to disk (it waits until the flush is complete), backs Tempo up, and upgrades it to Tempo 3. Afterwards every trace opens by ID.
+  - Search lags for a while: traces received in the 15 minutes before the migration appear in search once they are 15 minutes old. Tempo 3 answers searches over the last 15 minutes from its live store only.
+  - To skip the migration and accept the loss, add `SKIP_TEMPO_MIGRATION=1`. Tempo 2 must be running for the flush; a stopped Tempo 2 cannot be flushed.
 - **Grafana data from before 1.1.0.** Releases before 1.1.0 kept Grafana's data in the volume `oib-grafana_oib-grafana-data`; since 1.1.0 it is `oib-grafana-data`. `make install`/`make update` now move the data across automatically. If you already upgraded to 1.1.0, Grafana started empty there, but your old dashboards, users and settings are still in the old volume: `make update` points this out, and `make migrate-grafana-volume FORCE=1` brings them back (it backs up the current Grafana data first). Remove the old volume afterwards with `docker volume rm oib-grafana_oib-grafana-data`.
 
 ## 💾 Backup and Restore
@@ -592,10 +599,15 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
 ```
 
 - Backups are `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (override with `make backup BACKUP_DIR=/path`), owned by the user who ran `make`; `backups/` is git-ignored. One `make backup` run gives every file the same timestamp.
-- Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after, so the copy is crash-consistent (the state the databases' write-ahead logs are built to recover from). Measured freeze: under a second for Prometheus, Loki, Tempo and Pyroscope, about 10 s for a 90 MB Grafana volume; Pyroscope then reports not-ready for about a minute while it keeps running. Requests arriving during the freeze wait; collectors retry.
+- Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after.
+  - This is a crash-consistent copy, not an application-coordinated one: no checkpoint or flush happens first.
+  - `make test-backup` takes archives under write load, restores them, and checks that every log line Loki acknowledged before the freeze is back. Traces sent more than 10 s before the freeze must also be back; the most recent seconds may still have been on their way through Alloy.
+  - The freeze takes under a second, or about 10 s for a 90 MB Grafana volume. Pyroscope then reports not-ready for about a minute while it keeps running.
+  - Requests arriving during a freeze wait.
 - Covers Prometheus, Loki, Tempo, Grafana and, when the profiling stack is installed, Pyroscope. The shared-services volumes (PostgreSQL, Redis) are not backed up.
+- An archive is written under a `.partial` name and renamed only when complete. A failed or interrupted backup unpauses the container and leaves no file behind. A container left paused by a killed backup is unpaused by the next one.
 - `restore-*` asks for confirmation (`YES=1` skips it), checks that the archive is readable, stops that one service, **replaces the current volume contents** with the archive and starts the service again. `FILE` may be relative or absolute. The component's stack must be installed first.
-- `make test-backup` proves the whole cycle on a clean host: it writes known data, backs up, wipes every volume, restores and checks the data is back (see [testing/acceptance](testing/acceptance/README.md)).
+- `make test-backup ISOLATED=1` proves the whole cycle in a throwaway Docker-in-Docker daemon, so it is safe next to your install. It writes known data, backs up under write load, wipes every volume, restores and checks the data is back. It also checks that failed and interrupted backups clean up (see [testing/acceptance](testing/acceptance/README.md)).
 
 ## 💡 Tips
 

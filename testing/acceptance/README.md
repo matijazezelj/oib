@@ -2,13 +2,22 @@
 
 Two end-to-end tests that boot the real stacks and prove that user data survives the operations that put it at risk: backup/restore and upgrades.
 
-> ⚠️ Both tests **delete every OIB volume**. They refuse to start when OIB containers or volumes already exist. Run them on a disposable host (a CI runner, a throwaway VM, or a laptop without an OIB install). `OIB_TEST_FORCE=1` overrides the check and wipes the existing install.
+> ⚠️ Both tests **delete every OIB volume** of the Docker daemon they run against. Run directly, they refuse to start when OIB containers or volumes already exist (`OIB_TEST_FORCE=1` overrides that and wipes the install). On a machine with an OIB install, use `ISOLATED=1`.
 
 ```bash
-make test-backup                  # backup -> wipe -> restore round trip
-make test-upgrade                 # upgrade from the latest release tag
-make test-upgrade FROM=v1.0.0     # upgrade from a specific release
+make test-backup ISOLATED=1               # in a throwaway Docker-in-Docker daemon (safe next to an install)
+make test-upgrade FROM=v1.0.0 ISOLATED=1
+make test-backup                          # directly on this host's daemon (CI, clean hosts)
+make test-upgrade                         # upgrade from the latest release tag
 ```
+
+### Isolated mode (`ISOLATED=1`)
+
+[`isolated.sh`](isolated.sh) starts a privileged `docker:dind` container and runs the test in a small runner container that shares its network namespace. Containers, volumes, the `oib-network` network and the published ports of the test all live inside that inner daemon, so an OIB install on the host is never touched and its ports do not need to be free. Details:
+- The inner daemon's API listens on 127.0.0.1 inside the dind container only. It uses its own address ranges, so a DNS server on the host bridge (`172.17.0.1`) stays reachable.
+- Its image cache is kept in the volume `oib-acceptance-dind-cache`, so later runs skip most pulls. Set `DIND_KEEP_CACHE=0` to drop it, or remove it with `docker volume rm oib-acceptance-dind-cache`.
+- The repository is mounted at the same path inside, and the test's temporary files live in a scratch volume, so bind mounts in the compose files resolve. If there is no `.env`, a temporary one is created in the checkout and removed afterwards.
+- Requires Docker with privileged containers allowed. `KEEP=1` has no effect here, because the inner daemon is removed at the end.
 
 Requirements: Docker with Compose v2, `curl`, `jq`, `make`, `git` (and the release tags: `git fetch --tags`). The default OIB ports must be free. A run takes 5 to 10 minutes, mostly pulling images and waiting for Pyroscope, which takes about 70 s to report ready. If there is no `.env`, a temporary one with a random Grafana password is created and removed afterwards.
 
@@ -44,19 +53,33 @@ Checks retry for up to 120 s (`VERIFY_TIMEOUT`), because data takes a few second
 
 1. `make install` and `make install-profiling`, then wait until every endpoint is ready.
 2. Seed a run and confirm it is readable.
-3. `make backup` into a temporary directory. Every archive must exist and be owned by the invoking user.
-4. Delete every volume, reinstall on fresh volumes.
-5. **Control:** the seeded data must now be missing. This proves the checks can fail and that the later pass comes from the restore.
-6. `make restore-all STAMP=... YES=1`.
-7. The data checks and functional checks must pass.
+3. **Failure handling:** each case must leave Loki unpaused and no archive behind.
+   - A backup whose `tar` fails must exit non-zero.
+   - A backup interrupted with Ctrl+C (SIGINT to the process group) must clean up.
+   - A backup killed with `kill -9` must be healed by the next backup.
+4. `make backup` into a temporary directory **while a background writer keeps pushing logs and spans**, recording each write the backend acknowledged and when each component's backup started. Every archive must exist and be owned by the invoking user.
+5. Delete every volume, reinstall on fresh volumes.
+6. **Control:** the seeded data must now be missing. This proves the checks can fail and that the later pass comes from the restore.
+7. `make restore-all STAMP=... YES=1`.
+8. **Clean recovery and no lost writes:**
+   - `restore-clean-recovery`: no restored component may log corruption, repair, checksum or WAL replay errors while starting from the archive.
+   - `loki-load-before-backup`: every log line Loki acknowledged before its freeze must be back.
+   - `tempo-load-before-backup`: every trace sent more than 10 s before Tempo's freeze must open by ID. The 10 s allow for Alloy's batching.
+9. The data checks and functional checks must pass.
+
+`make backup` freezes most containers with `docker pause` while archiving their volumes. That gives a crash-consistent copy, not an application-coordinated one: no database checkpoint or buffer flush happens first. The restore is only proven by restoring. Steps 4, 8 and 9 do that with archives taken under write load. Tempo logs `failed to replay block. removing.` on every restart for the empty block it creates while shutting down, so that message is not treated as an error. Data loss is detected by step 8's checks of acknowledged writes, not from logs.
 
 ## `upgrade.sh` (`make test-upgrade FROM=<tag>`)
 
 1. Check out `<tag>` in a temporary git worktree and install it from there, including profiling.
 2. Seed a run on the old release.
-3. Upgrade the way users do: `make update` and `make update-profiling` from the current checkout.
-4. The data checks and functional checks must pass.
-5. Run `make update` a second time. It must not print the Grafana migration warning, and the seeded dashboard must still be there.
+3. If the old release runs Tempo 2, check the migration path first:
+   - `make update` must refuse, and Tempo must stay on 2.x.
+   - `make migrate-tempo` must succeed.
+   - The `tempo-search` check then waits until the seeded trace is 16 minutes old, because Tempo 3 searches blocks only for data older than 15 minutes. This adds about 10 minutes to the run.
+4. Upgrade the way users do: `make update` and `make update-profiling` from the current checkout.
+5. The data checks and functional checks must pass. Nothing is lost.
+6. Run `make update` a second time. It must not print the Grafana migration warning, and the seeded dashboard must still be there.
 
 Losses that are known and accepted for a starting release are listed in [`upgrade-expectations`](upgrade-expectations). They are reported as `XFAIL` and do not fail the run. If a listed check passes, it is reported as `XPASS`; remove it from the list. Any loss not listed fails the test.
 
@@ -66,4 +89,9 @@ Losses that are known and accepted for a starting release are listed in [`upgrad
 
 ## CI
 
-[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip and the upgrade test from every release in its matrix on pull requests that touch compose files, configs, dashboards, the Makefile or these tests, and on pushes to `main`. When you cut a release, add its tag to the matrix.
+[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, plus the upgrade test from every release in its matrix. It runs:
+- on every pull request except those that change only documentation (`*.md`, `docs/`, `LICENSE`, `completions/`);
+- on pushes to `main`;
+- weekly, to catch registry-side changes such as moved or deleted image tags.
+
+CI runners are fresh, so the tests run directly against the runner's daemon. When you cut a release, add its tag to the matrix.

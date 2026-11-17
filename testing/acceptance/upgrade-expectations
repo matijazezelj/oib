@@ -3,6 +3,5 @@
 # Check names are the ones printed by upgrade.sh (loki-data, tempo-search, ...).
 # A tag without a line here must upgrade without any loss.
 
-# v1.0.0 runs Tempo 2.6; Tempo 3 ignores the Tempo 2 WAL, and the test trace
-# has not been flushed to a block yet, so it is gone after the upgrade.
-v1.0.0 tempo-by-id tempo-search
+# v1.0.0 (Tempo 2.6): no loss since make migrate-tempo flushes Tempo 2 before the
+# upgrade; upgrade.sh runs it and waits for Tempo 3's 15-minute search window.

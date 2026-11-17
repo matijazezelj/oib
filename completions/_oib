@@ -93,6 +93,7 @@ _oib_targets() {
         'restore-pyroscope:Restore Pyroscope data (FILE=...)'
         'restore-all:Restore every component of one backup (STAMP=...)'
         'migrate-grafana-volume:Move Grafana data from the pre-1.1.0 volume'
+        'migrate-tempo:Upgrade Tempo 2 -> 3 without losing traces'
         
         # Utilities
         'open:Open Grafana in browser'

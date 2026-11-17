@@ -50,8 +50,21 @@ wait_ready with-profiling
 phase "Seed"
 seed_run "$STATE" with-profiling
 
-phase "Backup"
-make --no-print-directory backup BACKUP_DIR="$WORK/backups" TIMESTAMP="$STAMP"
+phase "Failed and interrupted backups leave the stack running"
+backup_failure_checks
+
+phase "Backup (while data is being written)"
+write_load_start "$WORK/load"
+sleep 5
+# Record when each component's backup starts ("<unix-ms> <component>").
+make --no-print-directory backup BACKUP_DIR="$WORK/backups" TIMESTAMP="$STAMP" 2>&1 \
+  | while IFS= read -r line; do
+      printf '%s\n' "$line"
+      c=$(printf '%s' "$line" | sed -n 's/.*Backing up \([a-z]*\)\.\.\..*/\1/p')
+      if [ -n "$c" ]; then echo "$(date +%s%3N) $c" >>"$WORK/backup-starts"; fi
+    done
+write_load_stop
+log "load written during the backup: $(grep -c ' log ' "$WORK/load") log lines, $(grep -c ' trace ' "$WORK/load") traces"
 for c in prometheus loki tempo grafana pyroscope; do
   [ -s "$WORK/backups/${c}_$STAMP.tar.gz" ] || die "backup file missing: ${c}_$STAMP.tar.gz"
   [ -O "$WORK/backups/${c}_$STAMP.tar.gz" ] || die "backup file not owned by the invoking user: ${c}_$STAMP.tar.gz"
@@ -69,8 +82,18 @@ phase "Control: fresh volumes do not have the data"
 verify_absent "$STATE"
 
 phase "Restore"
+RESTORE_SINCE=$(date +%s)
 make --no-print-directory restore-all STAMP="$STAMP" BACKUP_DIR="$WORK/backups" YES=1
 wait_ready with-profiling
+check restore-clean-recovery 1 no_recovery_errors "$RESTORE_SINCE"
+[ -s "$WORK/recovery-errors.txt" ] && cat "$WORK/recovery-errors.txt"
+# Writes acknowledged before a component's backup started must be in its archive.
+# Loki acknowledges a push once it is stored; spans travel through Alloy's batch
+# processor first, so traces get a 10 s allowance.
+started() { awk -v c="$1" '$2 == c { print $1; exit }' "$WORK/backup-starts"; }
+check loki-load-before-backup   60 load_logs_present   "$WORK/load" "$(started loki)"
+check tempo-load-before-backup  60 load_traces_present "$WORK/load" "$(( $(started tempo) - 10000 ))"
+[ -s "$WORK/load-report.txt" ] && sort -u "$WORK/load-report.txt" | sed 's/^/    /'
 
 phase "Verify restored data"
 verify_persisted "$STATE"

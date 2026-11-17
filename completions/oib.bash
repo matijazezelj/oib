@@ -31,7 +31,7 @@ _oib_completions() {
             update update-grafana update-logging update-metrics update-telemetry update-profiling latest clean \
             backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
             restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope \
-            migrate-grafana-volume \
+            migrate-grafana-volume migrate-tempo \
             uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
             help"
         COMPREPLY=($(compgen -W "$targets" -- "$cur"))

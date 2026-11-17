@@ -61,6 +61,25 @@ log "running: $(docker ps --filter name=^oib- --format '{{.Image}}' | sort | tr 
 phase "Seed on $FROM"
 seed_run "$STATE" with-profiling
 
+OLD_TEMPO=$(docker inspect -f '{{.Config.Image}}' oib-tempo)
+case "$OLD_TEMPO" in
+  *tempo:2.*|*tempo:v2.*)
+    phase "Tempo 2 -> 3 migration"
+    set +e
+    make --no-print-directory update >"$WORK/update-guarded.log" 2>&1; rc=$?
+    set -e
+    check tempo-guard-blocks-update 1 test "$rc" -ne 0
+    tempo_still_old() { [ "$(docker inspect -f '{{.Config.Image}}' oib-tempo)" = "$OLD_TEMPO" ]; }
+    check tempo-guard-left-tempo-alone 1 tempo_still_old
+    make --no-print-directory migrate-tempo BACKUP_DIR="$WORK/backups" >"$WORK/migrate-tempo.log" 2>&1 \
+      || { tail -30 "$WORK/migrate-tempo.log"; die "make migrate-tempo failed"; }
+    grep -E 'flushed|migrated' "$WORK/migrate-tempo.log" | sed 's/\x1b\[[0-9;]*m//g; s/^/    /'
+    # Tempo 3 searches only its live store for the most recent 15 minutes, so
+    # traces flushed by Tempo 2 become searchable once they are 15 minutes old.
+    export TEMPO_SEARCH_LAG=960
+    ;;
+esac
+
 phase "Upgrade to $(git describe --tags --always --dirty)"
 make --no-print-directory update >"$WORK/update.log" 2>&1 || { tail -30 "$WORK/update.log"; die "make update failed"; }
 make --no-print-directory update-profiling >>"$WORK/update.log" 2>&1 || { tail -30 "$WORK/update.log"; die "make update-profiling failed"; }

@@ -9,7 +9,7 @@
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api test-backup test-upgrade \
         backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
-        migrate-grafana-volume restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope
+        migrate-grafana-volume migrate-tempo tempo-guard restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope
 
 # Colors - real ESC bytes, so plain `echo` renders them under both dash and bash
 CYAN := $(shell printf '\033[36m')
@@ -101,7 +101,7 @@ help: ## Show this help message
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
-	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean|migrate-tempo|migrate-grafana-volume):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Backup & Restore:$(RESET)"
 	@grep -E '^(backup|restore|restore-all):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -155,7 +155,7 @@ network: ## Create shared Docker network
 
 # ==================== Installation ====================
 
-install: ## Install all observability stacks
+install: tempo-guard ## Install all observability stacks
 	@if [ ! -f .env ]; then \
 		echo "$(YELLOW)! No .env file found. Creating from .env.example...$(RESET)"; \
 		cp .env.example .env; \
@@ -199,6 +199,52 @@ install-grafana: network ## Install Grafana (unified dashboard)
 	@cd grafana && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Grafana installed$(RESET)"
 
+# ==================== Tempo 2 -> 3 migration ====================
+# Tempo 3 ignores the Tempo 2 write-ahead log, so traces Tempo 2 has not yet
+# flushed to a block are lost if Tempo is simply recreated on the new image.
+# tempo-guard stops install/update while Tempo 2 is still running;
+# migrate-tempo flushes it first, backs it up, then upgrades it.
+
+tempo_major = $$(docker inspect -f '{{.Config.Image}}' oib-tempo 2>/dev/null | sed -n 's/.*tempo:v\{0,1\}\([0-9][0-9]*\)\..*/\1/p')
+
+tempo-guard:
+	@major=$(tempo_major); \
+	if [ "$$major" = "2" ] && [ "$(SKIP_TEMPO_MIGRATION)" != "1" ]; then \
+		echo "$(RED)$(BOLD)✗ Tempo 2 is installed; this version runs Tempo 3.$(RESET)"; \
+		echo "  Upgrading by recreating the container drops every trace Tempo 2 has not flushed"; \
+		echo "  to disk yet (up to the last 5 minutes). Migrate first, then run your command again:"; \
+		echo "    $(GREEN)make migrate-tempo$(RESET)   (flushes Tempo 2, backs it up, upgrades to Tempo 3)"; \
+		echo "  To upgrade anyway and accept the loss: add SKIP_TEMPO_MIGRATION=1"; \
+		exit 1; \
+	fi
+
+migrate-tempo: ## Upgrade Tempo 2 -> 3 without losing traces (flush, backup, upgrade)
+	@major=$(tempo_major); \
+	if [ "$$major" != "2" ]; then echo "$(GREEN)✓$(RESET) Tempo is not on version 2 ($$(docker inspect -f '{{.Config.Image}}' oib-tempo 2>/dev/null || echo 'not installed')); nothing to migrate."; exit 0; fi; \
+	if [ "$$(docker inspect -f '{{.State.Running}}' oib-tempo)" != "true" ]; then \
+		echo "$(RED)✗ Tempo 2 is not running, so it cannot flush its write-ahead log.$(RESET)"; \
+		echo "  Start it from the previous OIB release, or upgrade without flushing: make update SKIP_TEMPO_MIGRATION=1"; \
+		exit 1; \
+	fi; \
+	echo "$(CYAN)[1/3] Flushing Tempo 2's in-memory traces to disk...$(RESET)"; \
+	m() { curl -fsS $(TEMPO_URL)/metrics 2>/dev/null | awk -v n="$$1" '$$1 ~ "^"n"({|$$)" { s += $$2 } END { printf "%d", s }'; }; \
+	curl -fsS -X POST $(TEMPO_URL)/flush >/dev/null || { echo "$(RED)✗ POST $(TEMPO_URL)/flush failed$(RESET)"; exit 1; }; \
+	i=0; until [ "$$(m tempo_ingester_live_traces)" = 0 ] && [ "$$(m tempo_ingester_flush_queue_length)" = 0 ]; do \
+		i=$$((i+1)); [ $$i -gt 60 ] && { echo "$(RED)✗ Tempo did not finish flushing within 60s$(RESET)"; exit 1; }; \
+		sleep 1; \
+	done; \
+	echo "  $(GREEN)✓$(RESET) flushed ($$(m tempo_ingester_blocks_flushed_total) block(s) written)"; \
+	echo "$(CYAN)[2/3] Backing up Tempo...$(RESET)"; \
+	$(MAKE) --no-print-directory backup-tempo || exit 1; \
+	echo "$(CYAN)[3/3] Upgrading Tempo...$(RESET)"; \
+	$(MAKE) --no-print-directory update-telemetry SKIP_TEMPO_MIGRATION=1 || exit 1; \
+	i=0; until curl -fsS -o /dev/null $(TEMPO_URL)/ready 2>/dev/null; do i=$$((i+1)); [ $$i -gt 120 ] && break; sleep 1; done; \
+	echo ""; \
+	echo "$(GREEN)$(BOLD)✓ Tempo migrated to $$(docker inspect -f '{{.Config.Image}}' oib-tempo)$(RESET)"; \
+	echo "  Every trace opens by ID right away. Traces received in the 15 minutes before the"; \
+	echo "  migration show up in search once they are 15 minutes old (Tempo 3 searches only"; \
+	echo "  its live store for the most recent 15 minutes). Continue with: make update"
+
 # Releases before 1.1.0 let Compose name Grafana's volume oib-grafana_oib-grafana-data;
 # since 1.1.0 it is oib-grafana-data. Move the data over so upgrades keep it.
 OLD_GRAFANA_VOLUME := oib-grafana_oib-grafana-data
@@ -238,7 +284,7 @@ install-metrics: network ## Install metrics stack (Prometheus + Exporters)
 	@cd metrics && p=""; if docker inspect oib-pushgateway >/dev/null 2>&1; then p="--profile pushgateway"; fi; $(DOCKER_COMPOSE) $$p up -d --remove-orphans
 	@echo "$(GREEN)✓ Metrics stack installed$(RESET)"
 
-install-telemetry: network ## Install telemetry stack (Tempo + Alloy)
+install-telemetry: network tempo-guard ## Install telemetry stack (Tempo + Alloy)
 	@echo "$(CYAN)🔭 Installing Telemetry Stack...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Telemetry stack installed$(RESET)"
@@ -330,6 +376,12 @@ restart-services: ## Restart shared services (PostgreSQL + Redis)
 
 # ==================== Uninstall ====================
 
+# $(call check_volume_removed,<volume>): fail loudly if `down -v` could not delete it
+check_volume_removed = if docker volume inspect $(1) >/dev/null 2>&1; then \
+	echo "$(RED)✗ Volume $(1) was not removed; it is still used by:$(RESET)"; \
+	docker ps -a --filter volume=$(1) --format '    {{.Names}} ({{.Image}}, {{.Status}})'; \
+	echo "  Remove those containers (docker rm -f <name>) and run the uninstall again."; exit 1; fi
+
 uninstall: ## Remove all stacks and volumes (with confirmation)
 	@echo "$(RED)$(BOLD)⚠️  WARNING: This will delete ALL data (logs, metrics, traces)!$(RESET)"
 	@echo ""
@@ -344,26 +396,31 @@ uninstall: ## Remove all stacks and volumes (with confirmation)
 uninstall-grafana: ## Remove Grafana and volumes
 	@echo "$(YELLOW)Removing Grafana...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@$(call check_volume_removed,oib-grafana-data)
 	@echo "$(GREEN)✓ Grafana removed$(RESET)"
 
 uninstall-logging: ## Remove logging stack and volumes
 	@echo "$(YELLOW)Removing logging stack...$(RESET)"
 	@cd logging && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@$(call check_volume_removed,oib-loki-data)
 	@echo "$(GREEN)✓ Logging stack removed$(RESET)"
 
 uninstall-metrics: ## Remove metrics stack and volumes
 	@echo "$(YELLOW)Removing metrics stack...$(RESET)"
 	@cd metrics && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@$(call check_volume_removed,oib-prometheus-data)
 	@echo "$(GREEN)✓ Metrics stack removed$(RESET)"
 
 uninstall-telemetry: ## Remove telemetry stack and volumes
 	@echo "$(YELLOW)Removing telemetry stack...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@$(call check_volume_removed,oib-tempo-data)
 	@echo "$(GREEN)✓ Telemetry stack removed$(RESET)"
 
 uninstall-profiling: ## Remove profiling stack and volumes
 	@echo "$(YELLOW)Removing profiling stack...$(RESET)"
 	@cd profiling && $(DOCKER_COMPOSE) --profile '*' down -v --remove-orphans
+	@$(call check_volume_removed,oib-pyroscope-data)
 	@echo "$(GREEN)✓ Profiling stack removed$(RESET)"
 
 uninstall-services: ## Remove shared services and volumes (PostgreSQL + Redis)
@@ -758,7 +815,7 @@ validate: ## Validate configuration files
 
 # ==================== Maintenance ====================
 
-update: ## Pull pinned images and recreate the core stacks
+update: tempo-guard ## Pull pinned images and recreate the core stacks
 	@echo "$(CYAN)Pulling latest images...$(RESET)"
 	@cd grafana && $(DOCKER_COMPOSE) pull
 	@cd logging && $(DOCKER_COMPOSE) pull
@@ -796,7 +853,7 @@ update-metrics: ## Pull latest metrics images (Prometheus, exporters) and restar
 	@cd metrics && p=""; if docker inspect oib-pushgateway >/dev/null 2>&1; then p="--profile pushgateway"; fi; $(DOCKER_COMPOSE) $$p up -d --remove-orphans
 	@echo "$(GREEN)✓ Metrics stack updated$(RESET)"
 
-update-telemetry: ## Pull latest telemetry images (Tempo, Alloy) and restart
+update-telemetry: tempo-guard ## Pull latest telemetry images (Tempo, Alloy) and restart
 	@echo "$(CYAN)Pulling latest telemetry images...$(RESET)"
 	@cd telemetry && $(DOCKER_COMPOSE) pull
 	@echo "$(CYAN)Restarting telemetry stack...$(RESET)"
@@ -810,7 +867,7 @@ update-profiling: ## Pull latest profiling images (Pyroscope) and restart
 	@cd profiling && $(DOCKER_COMPOSE) up -d --remove-orphans
 	@echo "$(GREEN)✓ Profiling stack updated$(RESET)"
 
-latest: ## Pull and run :latest versions of all images
+latest: tempo-guard ## Pull and run :latest versions of all images
 	@echo "$(BOLD)🔄 Pulling :latest images...$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Grafana:$(RESET)"
@@ -1146,21 +1203,27 @@ test-api: network ## Run k6 API load test
 	@echo "$(GREEN)✓ API test complete. Check the Request Latency dashboard in Grafana.$(RESET)"
 
 # ==================== Acceptance Tests ====================
-# Both tests need a host without an OIB install: they delete every OIB volume.
+# Both tests delete every OIB volume, so they refuse to run next to an existing
+# install. ISOLATED=1 runs them against a throwaway Docker-in-Docker daemon
+# instead, which works on any host with Docker (privileged containers allowed).
 
-test-backup: ## Backup -> wipe -> restore round trip, verifies the data comes back
-	@testing/acceptance/backup-roundtrip.sh
+ACCEPTANCE_RUN = $(if $(filter 1,$(ISOLATED)),testing/acceptance/isolated.sh,testing/acceptance/run.sh)
 
-test-upgrade: ## Install FROM=<tag> (default: latest release), upgrade, verify data
-	@testing/acceptance/upgrade.sh $(FROM)
+test-backup: ## Backup -> wipe -> restore round trip (ISOLATED=1: in Docker-in-Docker)
+	@$(ACCEPTANCE_RUN) backup-roundtrip.sh
+
+test-upgrade: ## Upgrade from FROM=<tag> and verify data (ISOLATED=1: in Docker-in-Docker)
+	@$(ACCEPTANCE_RUN) upgrade.sh $(FROM)
 
 # ==================== Backup & Restore ====================
 #
 # Every component keeps its data in the volume oib-<component>-data and runs
 # as the container oib-<component> in the stack directory below.
 # Each running component is frozen with `docker pause` while its volume is
-# archived, so the copy is crash-consistent (what the databases' write-ahead logs
-# are built to recover from); it is unpaused right after, usually within a second.
+# archived, so the copy is crash-consistent (the state the databases' write-ahead
+# logs are built to recover from); it is unpaused right after, usually within a
+# second. make test-backup verifies that every write acknowledged before the
+# freeze is back after a restore, with archives taken under write load.
 
 BACKUP_DIR := ./backups
 TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
@@ -1181,14 +1244,21 @@ echo "$(CYAN)Backing up $(1)...$(RESET)"; \
 if ! docker volume inspect oib-$(1)-data >/dev/null 2>&1; then \
 	echo "  $(YELLOW)!$(RESET) oib-$(1)-data volume not found (skipped)"; exit 0; \
 fi; \
-running=$$(docker ps -q -f name=^oib-$(1)$$ -f status=running); \
-if [ -n "$$running" ]; then docker pause oib-$(1) >/dev/null || exit 1; \
-	trap 'docker unpause oib-$(1) >/dev/null 2>&1; exit 130' INT TERM; fi; \
+if [ -n "$$(docker ps -q -f name=^oib-$(1)$$ -f status=paused)" ]; then \
+	echo "  $(YELLOW)!$(RESET) oib-$(1) was left paused (interrupted backup?), unpausing"; docker unpause oib-$(1) >/dev/null; \
+fi; \
 out="$(1)_$(TIMESTAMP).tar.gz"; \
-docker run --rm -v oib-$(1)-data:/data:ro -v "$(abspath $(BACKUP_DIR))":/backup $(BACKUP_IMAGE) \
-	sh -c "tar czf /backup/$$out -C /data . && chown $(HOST_UID):$(HOST_GID) /backup/$$out"; rc=$$?; \
-if [ -n "$$running" ]; then docker unpause oib-$(1) >/dev/null; fi; \
-if [ $$rc -ne 0 ]; then echo "  $(RED)✗$(RESET) $(1) backup failed"; exit $$rc; fi; \
+running=$$(docker ps -q -f name=^oib-$(1)$$ -f status=running); \
+resume() { docker rm -f oib-backup-$(1) >/dev/null 2>&1; if [ -n "$$running" ]; then docker unpause oib-$(1) >/dev/null 2>&1; fi; }; \
+docker rm -f oib-backup-$(1) >/dev/null 2>&1; \
+if [ -n "$$running" ]; then \
+	trap 'resume; rm -f "$(BACKUP_DIR)/'"$$out"'.partial"; exit 130' INT TERM; \
+	docker pause oib-$(1) >/dev/null || exit 1; \
+fi; \
+docker run --rm --name oib-backup-$(1) -v oib-$(1)-data:/data:ro -v "$(abspath $(BACKUP_DIR))":/backup $(BACKUP_IMAGE) \
+	sh -c "tar czf /backup/$$out.partial -C /data . && chown $(HOST_UID):$(HOST_GID) /backup/$$out.partial && mv /backup/$$out.partial /backup/$$out"; rc=$$?; \
+resume; \
+if [ $$rc -ne 0 ]; then rm -f "$(BACKUP_DIR)/$$out.partial"; echo "  $(RED)✗$(RESET) $(1) backup failed (nothing written)"; exit $$rc; fi; \
 echo "  $(GREEN)✓$(RESET) $(1): $(BACKUP_DIR)/$$out"
 endef
 
@@ -1207,7 +1277,8 @@ $(call confirm,Are you sure?); \
 echo "$(CYAN)Stopping $(1)...$(RESET)"; \
 (cd $($(1)_STACK) && $(DOCKER_COMPOSE) stop $(1)) >/dev/null 2>&1 || true; \
 echo "$(CYAN)Restoring from $(2)...$(RESET)"; \
-docker run --rm -v oib-$(1)-data:/data -v "$(abspath $(2))":/backup.tar.gz:ro $(BACKUP_IMAGE) \
+docker rm -f oib-restore-$(1) >/dev/null 2>&1; \
+docker run --rm --name oib-restore-$(1) -v oib-$(1)-data:/data -v "$(abspath $(2))":/backup.tar.gz:ro $(BACKUP_IMAGE) \
 	sh -c "tar tzf /backup.tar.gz >/dev/null && find /data -mindepth 1 -delete && tar xzf /backup.tar.gz -C /data" \
 	|| { echo "$(RED)✗ Restore failed (archive unreadable or extraction error)$(RESET)"; (cd $($(1)_STACK) && $(DOCKER_COMPOSE) start $(1)) >/dev/null 2>&1; exit 1; }; \
 echo "$(CYAN)Starting $(1)...$(RESET)"; \
