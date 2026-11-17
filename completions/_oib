@@ -75,6 +75,8 @@ _oib_targets() {
         'test-stress:Run k6 stress test'
         'test-spike:Run k6 spike test'
         'test-api:Run k6 API load test'
+        'test-backup:Backup/restore round trip test (deletes OIB data)'
+        'test-upgrade:Upgrade test from FROM=<tag> (deletes OIB data)'
 
         # Backup & Restore
         'backup:Backup all OIB data volumes'
@@ -82,11 +84,15 @@ _oib_targets() {
         'backup-loki:Backup Loki data'
         'backup-tempo:Backup Tempo data'
         'backup-grafana:Backup Grafana data'
+        'backup-pyroscope:Backup Pyroscope data'
         'restore:List backups and restore usage'
         'restore-prometheus:Restore Prometheus data (FILE=...)'
         'restore-loki:Restore Loki data (FILE=...)'
         'restore-tempo:Restore Tempo data (FILE=...)'
         'restore-grafana:Restore Grafana data (FILE=...)'
+        'restore-pyroscope:Restore Pyroscope data (FILE=...)'
+        'restore-all:Restore every component of one backup (STAMP=...)'
+        'migrate-grafana-volume:Move Grafana data from the pre-1.1.0 volume'
         
         # Utilities
         'open:Open Grafana in browser'
