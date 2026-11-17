@@ -226,18 +226,21 @@ migrate-tempo: ## Upgrade Tempo 2 -> 3 without losing traces (flush, backup, upg
 		echo "  Start it from the previous OIB release, or upgrade without flushing: make update SKIP_TEMPO_MIGRATION=1"; \
 		exit 1; \
 	fi; \
-	echo "$(CYAN)[1/3] Flushing Tempo 2's in-memory traces to disk...$(RESET)"; \
+	echo "$(CYAN)[1/4] Pulling the new telemetry images...$(RESET)"; \
+	(cd telemetry && $(DOCKER_COMPOSE) pull -q) || exit 1; \
+	echo "$(CYAN)[2/4] Backing up Tempo 2 (to roll back with restore-tempo + the previous release)...$(RESET)"; \
+	$(MAKE) --no-print-directory backup-tempo || exit 1; \
+	echo "$(CYAN)[3/4] Flushing Tempo 2 and stopping its ingester...$(RESET)"; \
 	m() { curl -fsS $(TEMPO_URL)/metrics 2>/dev/null | awk -v n="$$1" '$$1 ~ "^"n"({|$$)" { s += $$2 } END { printf "%d", s }'; }; \
-	curl -fsS -X POST $(TEMPO_URL)/flush >/dev/null || { echo "$(RED)✗ POST $(TEMPO_URL)/flush failed$(RESET)"; exit 1; }; \
+	curl -fsS -X POST $(TEMPO_URL)/shutdown >/dev/null || { echo "$(RED)✗ POST $(TEMPO_URL)/shutdown failed$(RESET)"; exit 1; }; \
 	i=0; until [ "$$(m tempo_ingester_live_traces)" = 0 ] && [ "$$(m tempo_ingester_flush_queue_length)" = 0 ]; do \
 		i=$$((i+1)); [ $$i -gt 60 ] && { echo "$(RED)✗ Tempo did not finish flushing within 60s$(RESET)"; exit 1; }; \
 		sleep 1; \
 	done; \
-	echo "  $(GREEN)✓$(RESET) flushed ($$(m tempo_ingester_blocks_flushed_total) block(s) written)"; \
-	echo "$(CYAN)[2/3] Backing up Tempo...$(RESET)"; \
-	$(MAKE) --no-print-directory backup-tempo || exit 1; \
-	echo "$(CYAN)[3/3] Upgrading Tempo...$(RESET)"; \
-	$(MAKE) --no-print-directory update-telemetry SKIP_TEMPO_MIGRATION=1 || exit 1; \
+	sleep 2; \
+	echo "  $(GREEN)✓$(RESET) flushed; Tempo 2 no longer accepts traces (Alloy keeps retrying them)"; \
+	echo "$(CYAN)[4/4] Recreating Tempo on version 3...$(RESET)"; \
+	(cd telemetry && $(DOCKER_COMPOSE) up -d --remove-orphans) || exit 1; \
 	i=0; until curl -fsS -o /dev/null $(TEMPO_URL)/ready 2>/dev/null; do i=$$((i+1)); [ $$i -gt 120 ] && break; sleep 1; done; \
 	echo ""; \
 	echo "$(GREEN)$(BOLD)✓ Tempo migrated to $$(docker inspect -f '{{.Config.Image}}' oib-tempo)$(RESET)"; \

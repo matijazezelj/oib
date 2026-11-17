@@ -157,7 +157,7 @@ write_load_start() { # FILE
       t=$(hex 32)
       seed_trace "load-$LOAD_RUN" "$t" && echo "$ms trace $t" >>"$file"
       sleep 0.2
-    done ) &
+    done ) >/dev/null 2>&1 &
   LOAD_PID=$!
 }
 write_load_stop() { kill "$LOAD_PID" 2>/dev/null; wait "$LOAD_PID" 2>/dev/null || true; }

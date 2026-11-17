@@ -15,9 +15,10 @@ make test-upgrade                         # upgrade from the latest release tag
 
 [`isolated.sh`](isolated.sh) starts a privileged `docker:dind` container and runs the test in a small runner container that shares its network namespace. Containers, volumes, the `oib-network` network and the published ports of the test all live inside that inner daemon, so an OIB install on the host is never touched and its ports do not need to be free. Details:
 - The inner daemon's API listens on 127.0.0.1 inside the dind container only. It uses its own address ranges, so a DNS server on the host bridge (`172.17.0.1`) stays reachable.
-- Its image cache is kept in the volume `oib-acceptance-dind-cache`, so later runs skip most pulls. Set `DIND_KEEP_CACHE=0` to drop it, or remove it with `docker volume rm oib-acceptance-dind-cache`.
+- Its image cache is kept in the volume `oibtest-dind-cache`, so later runs skip most pulls. Set `DIND_KEEP_CACHE=0` to drop it, or remove it with `docker volume rm oibtest-dind-cache`.
 - The repository is mounted at the same path inside, and the test's temporary files live in a scratch volume, so bind mounts in the compose files resolve. If there is no `.env`, a temporary one is created in the checkout and removed afterwards.
 - Requires Docker with privileged containers allowed. `KEEP=1` has no effect here, because the inner daemon is removed at the end.
+- One isolated run at a time: a second one refuses to start while an `oibtest-dind-*` container is running, because both would use the same image cache.
 
 Requirements: Docker with Compose v2, `curl`, `jq`, `make`, `git` (and the release tags: `git fetch --tags`). The default OIB ports must be free. A run takes 5 to 10 minutes, mostly pulling images and waiting for Pyroscope, which takes about 70 s to report ready. If there is no `.env`, a temporary one with a random Grafana password is created and removed afterwards.
 
@@ -75,7 +76,7 @@ Checks retry for up to 120 s (`VERIFY_TIMEOUT`), because data takes a few second
 2. Seed a run on the old release.
 3. If the old release runs Tempo 2, check the migration path first:
    - `make update` must refuse, and Tempo must stay on 2.x.
-   - `make migrate-tempo` must succeed.
+   - `make migrate-tempo` must succeed while a background writer keeps sending traces, and every trace Alloy accepted must open by ID afterwards (`tempo-migration-load`).
    - The `tempo-search` check then waits until the seeded trace is 16 minutes old, because Tempo 3 searches blocks only for data older than 15 minutes. This adds about 10 minutes to the run.
 4. Upgrade the way users do: `make update` and `make update-profiling` from the current checkout.
 5. The data checks and functional checks must pass. Nothing is lost.

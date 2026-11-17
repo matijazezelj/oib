@@ -8,7 +8,7 @@
 #
 # How it works:
 #   - a privileged docker:dind container runs the inner daemon; its image cache
-#     lives in the volume oib-acceptance-dind-cache, so later runs skip most pulls
+#     lives in the volume oibtest-dind-cache, so later runs skip most pulls
 #   - the test runs in a small runner container that shares the dind network
 #     namespace (the inner stacks publish on its 127.0.0.1) and talks to the
 #     inner daemon over its TCP socket, which listens on 127.0.0.1 only
@@ -28,10 +28,18 @@ TEST=${1:?usage: isolated.sh <backup-roundtrip.sh|upgrade.sh> [args]}; shift
 [ -x "$DIR/$TEST" ] || { echo "unknown test: $TEST" >&2; exit 2; }
 
 DIND_IMAGE=docker:27.5.1-dind
-RUNNER_IMAGE=oib-acceptance-runner:2
-NAME=oib-acceptance-dind-$$
-SCRATCH=oib-acceptance-scratch-$$
-CACHE=oib-acceptance-dind-cache
+# Names start with "oibtest-", not "oib-", so the clean-host guard and the
+# teardown of a direct (non-isolated) run never match them.
+RUNNER_IMAGE=oibtest-runner:2
+NAME=oibtest-dind-$$
+SCRATCH=oibtest-scratch-$$
+CACHE=oibtest-dind-cache
+
+# Two inner daemons must not share one image cache (/var/lib/docker).
+if [ -n "$(docker ps -q --filter name=^oibtest-dind-)" ]; then
+  echo "another isolated acceptance run is in progress ($(docker ps --filter name=^oibtest-dind- --format '{{.Names}}')); wait for it to finish" >&2
+  exit 2
+fi
 
 cleanup() {
   local rc=$?

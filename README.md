@@ -583,7 +583,8 @@ What survives an upgrade is checked in CI on every change to the stacks (`make t
 - **Tempo 2 → 3** (upgrading from v1.0.0) is a migration, not an image refresh:
   - Tempo 3 ignores Tempo 2's write-ahead log, so recreating the container drops every trace Tempo 2 has not flushed to disk yet, which can be up to the last 5 minutes.
   - `make install`, `make update`, `make update-telemetry` and `make latest` therefore refuse to run while Tempo 2 is installed.
-  - `make migrate-tempo` flushes Tempo 2 to disk (it waits until the flush is complete), backs Tempo up, and upgrades it to Tempo 3. Afterwards every trace opens by ID.
+  - `make migrate-tempo` pulls the new images, backs Tempo 2 up, makes it flush everything to disk and stop accepting traces (Alloy queues and retries them), and recreates it as Tempo 3 right away. Afterwards every trace opens by ID, including those sent during the switch. The upgrade test checks this under continuous trace load.
+  - Run it right after `git pull`, before anything restarts Tempo: the pulled `tempo.yaml` is Tempo 3 syntax, so a restarted Tempo 2 crash-loops and can no longer be flushed. If that has already happened, its unflushed traces are gone; continue with `make update SKIP_TEMPO_MIGRATION=1`.
   - Search lags for a while: traces received in the 15 minutes before the migration appear in search once they are 15 minutes old. Tempo 3 answers searches over the last 15 minutes from its live store only.
   - To skip the migration and accept the loss, add `SKIP_TEMPO_MIGRATION=1`. Tempo 2 must be running for the flush; a stopped Tempo 2 cannot be flushed.
 - **Grafana data from before 1.1.0.** Releases before 1.1.0 kept Grafana's data in the volume `oib-grafana_oib-grafana-data`; since 1.1.0 it is `oib-grafana-data`. `make install`/`make update` now move the data across automatically. If you already upgraded to 1.1.0, Grafana started empty there, but your old dashboards, users and settings are still in the old volume: `make update` points this out, and `make migrate-grafana-volume FORCE=1` brings them back (it backs up the current Grafana data first). Remove the old volume afterwards with `docker volume rm oib-grafana_oib-grafana-data`.
@@ -601,7 +602,7 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
 - Backups are `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (override with `make backup BACKUP_DIR=/path`), owned by the user who ran `make`; `backups/` is git-ignored. One `make backup` run gives every file the same timestamp.
 - Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after.
   - This is a crash-consistent copy, not an application-coordinated one: no checkpoint or flush happens first.
-  - `make test-backup` takes archives under write load, restores them, and checks that every log line Loki acknowledged before the freeze is back. Traces sent more than 10 s before the freeze must also be back; the most recent seconds may still have been on their way through Alloy.
+  - `make test-backup` takes archives under write load, restores them, and checks that every log line Loki acknowledged before the freeze is back. Traces sent more than 10 s before the freeze must also be back. Traces from the last few seconds may be lost, as they would be in a crash: they can still be in Alloy's batch or in Tempo's newest, unfinished block.
   - The freeze takes under a second, or about 10 s for a 90 MB Grafana volume. Pyroscope then reports not-ready for about a minute while it keeps running.
   - Requests arriving during a freeze wait.
 - Covers Prometheus, Loki, Tempo, Grafana and, when the profiling stack is installed, Pyroscope. The shared-services volumes (PostgreSQL, Redis) are not backed up.
