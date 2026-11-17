@@ -46,6 +46,7 @@ seed_grafana() { # RUN
     -d "{\"dashboard\":{\"uid\":\"oib-acc-$1\",\"title\":\"oib-acceptance $1\",\"panels\":[],\"schemaVersion\":39},\"overwrite\":true}"
 }
 
+
 # ---------- readers (succeed only when the data is there) ----------
 
 has_log() { # RUN
@@ -77,6 +78,8 @@ has_profile() { # RUN
 has_dashboard() { # RUN
   curl -fsS -u "$GRAFANA_AUTH" "$GRAFANA/api/dashboards/uid/oib-acc-$1" >/dev/null
 }
+
+has_prom_history_now() { has_prom_history "$(date +%s)"; }
 
 has_prom_history() { # SEED_TIME
   curl -fsS -G "$PROM/api/v1/query" --data-urlencode 'query=count_over_time(up{job="prometheus"}[2m])' \
@@ -136,6 +139,111 @@ containers_current() {
   done
 }
 
+# ---------- backup robustness ----------
+
+is_unpaused() { [ "$(docker inspect -f '{{.State.Paused}}' "oib-$1")" = false ]; }
+is_paused()   { [ "$(docker inspect -f '{{.State.Paused}}' "oib-$1")" = true ]; }
+no_helper_containers() { [ -z "$(docker ps -aq --filter name=^oib-backup- --filter name=^oib-restore-)" ]; }
+no_files_in() { [ -z "$(ls -A "$1" 2>/dev/null)" ]; }
+
+# Background writer: keeps pushing log lines and spans while a backup runs, so
+# the archives are taken from volumes that are being written to. Every write
+# that the backend acknowledged is recorded as "<unix-ms> <kind> <id>" in FILE.
+write_load_start() { # FILE
+  local file=$1
+  : >"$file"
+  ( n=0
+    while :; do
+      n=$((n + 1))
+      ms=$(date +%s%3N)
+      seed_loki_line "load-$LOAD_RUN" "load $n" && echo "$ms log $n" >>"$file"
+      t=$(hex 32)
+      seed_trace "load-$LOAD_RUN" "$t" && echo "$ms trace $t" >>"$file"
+      sleep 0.2
+    done ) >/dev/null 2>&1 &
+  LOAD_PID=$!
+}
+write_load_stop() { kill "$LOAD_PID" 2>/dev/null; wait "$LOAD_PID" 2>/dev/null || true; }
+LOAD_RUN=$(hex 8)
+
+seed_loki_line() { # RUN TEXT: one acknowledged log line
+  local ns; ns="$(date +%s%N)"
+  curl -fsS -o /dev/null -X POST "$LOKI/loki/api/v1/push" -H 'Content-Type: application/json' \
+    -d "{\"streams\":[{\"stream\":{\"job\":\"oib-acceptance\",\"run\":\"$1\"},\"values\":[[\"$ns\",\"$2\"]]}]}"
+}
+
+# All load log lines acknowledged before CUTOFF_MS must be in Loki.
+load_logs_present() { # LOADFILE CUTOFF_MS
+  local want have missing
+  want=$(awk -v c="$2" '$1 < c && $2 == "log" { print "load " $3 }' "$1" | sort)
+  [ -n "$want" ] || return 0
+  have=$(curl -fsS -G "$LOKI/loki/api/v1/query_range" --data-urlencode "query={job=\"oib-acceptance\",run=\"load-$LOAD_RUN\"}" \
+           --data-urlencode "start=$(( $(date +%s) - 3600 ))000000000" --data-urlencode 'limit=5000' \
+         | jq -r '.data.result[].values[][1]' | sort -u)
+  missing=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$have"))
+  [ -z "$missing" ] || { echo "$(printf '%s\n' "$missing" | wc -l) of $(printf '%s\n' "$want" | wc -l) load log lines missing" >>"$WORK/load-report.txt"; return 1; }
+}
+
+# All load traces sent before CUTOFF_MS must open by ID.
+load_traces_present() { # LOADFILE CUTOFF_MS
+  local t missing=0 total=0
+  while read -r t; do
+    total=$((total + 1))
+    curl -fsS -o /dev/null "$TEMPO/api/v2/traces/$t" || missing=$((missing + 1))
+  done < <(awk -v c="$2" '$1 < c && $2 == "trace" { print $3 }' "$1")
+  [ "$missing" -eq 0 ] || { echo "$missing of $total load traces missing" >>"$WORK/load-report.txt"; return 1; }
+}
+
+# A backup that fails or is interrupted must unpause the container and leave no
+# archive behind; a container left paused by kill -9 is unpaused by the next backup.
+backup_failure_checks() {
+  local d="$WORK/failed-backups" pid rc
+  mkdir -p "$d"
+  set +e
+  make --no-print-directory backup-loki BACKUP_DIR="$d" "BACKUP_IMAGE=--entrypoint false $BACKUP_TEST_IMAGE" >/dev/null 2>&1; rc=$?
+  set -e
+  check backup-failure-exits-nonzero 1 test "$rc" -ne 0
+  check backup-failure-unpauses 10 is_unpaused loki
+  check backup-failure-leaves-no-file 1 no_files_in "$d"
+  # Job control gives each background job its own process group, so the whole
+  # job (make, its shell, docker run) can be signalled the way Ctrl+C would.
+  set -m
+  make --no-print-directory backup-loki BACKUP_DIR="$d" "BACKUP_IMAGE=--entrypoint sleep $BACKUP_TEST_IMAGE 30" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  retry 20 is_paused loki || true
+  kill -INT -- "-$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
+  check interrupted-backup-unpauses 10 is_unpaused loki
+  check interrupted-backup-leaves-no-file 1 no_files_in "$d"
+  check interrupted-backup-leaves-no-helper 10 no_helper_containers
+  set -m
+  make --no-print-directory backup-loki BACKUP_DIR="$d" "BACKUP_IMAGE=--entrypoint sleep $BACKUP_TEST_IMAGE 30" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  retry 20 is_paused loki || true
+  kill -KILL -- "-$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
+  make --no-print-directory backup-loki BACKUP_DIR="$d" >/dev/null 2>&1 || true
+  check killed-backup-healed-by-next-backup 10 is_unpaused loki
+  check next-backup-removes-stale-helper 1 no_helper_containers
+  rm -rf "$d"
+}
+BACKUP_TEST_IMAGE=alpine:3.20
+
+# After a restore, no component may report repairing or discarding corrupt data.
+# (Tempo's "failed to replay block. removing." is not listed: it is logged on every
+# clean restart for the empty block Tempo creates while shutting down.)
+RECOVERY_ERRORS='corrupt|repair|checksum|malformed|truncat|invalid magic|unexpected eof|error replaying'
+# Matching lines are written to $WORK/recovery-errors.txt (check() hides output).
+no_recovery_errors() { # SINCE (unix seconds)
+  local c out bad=0 report="$WORK/recovery-errors.txt"
+  : >"$report"
+  for c in prometheus loki tempo grafana pyroscope; do
+    out=$(docker logs --since "$1" "oib-$c" 2>&1 | grep -iE "$RECOVERY_ERRORS" | head -5 || true)
+    if [ -n "$out" ]; then printf '    oib-%s:\n%s\n' "$c" "$(printf '%s\n' "$out" | cut -c1-300 | sed 's/^/      /')" >>"$report"; bad=1; fi
+  done
+  return $bad
+}
+
 # ---------- run-level helpers ----------
 
 # seed_run STATE_FILE [with-profiling]: write a new run and wait until it is readable
@@ -143,15 +251,19 @@ seed_run() {
   local state=$1 prof=${2:-} run trace
   run=$(hex 8); trace=$(hex 32)
   log "seeding run $run (trace $trace)"
-  retry 60 has_prom_history "$(date +%s)" || die "Prometheus has no samples of up{job=\"prometheus\"} yet"
+  local tp; tp=$(date +%s)
+  retry 60 has_prom_history_now || die "Prometheus has no samples of up{job=\"prometheus\"} yet"
+  log "Prometheus has history after $(( $(date +%s) - tp ))s"
   seed_loki "$run" || die "Loki push failed"
   seed_trace "$run" "$trace" || die "OTLP trace export failed"
   seed_grafana "$run" || die "Grafana dashboard create failed"
   [ "$prof" = with-profiling ] && { seed_profile "$run" || die "Pyroscope ingest failed"; }
+  local t0; t0=$(date +%s)
   retry 60 has_log "$run" || die "seeded log line is not readable"
   retry 90 has_trace_by_id "$run" "$trace" || die "seeded trace is not readable"
   retry 30 has_dashboard "$run" || die "seeded dashboard is not readable"
   [ "$prof" = with-profiling ] && { retry 90 has_profile "$run" || die "seeded profile is not readable"; }
+  log "all seeded data readable after $(( $(date +%s) - t0 ))s"
   sleep 2
   cat >"$state" <<EOF
 RUN=$run
@@ -170,7 +282,16 @@ verify_persisted() {
   check loki-data         "$t" has_log "$RUN"
   check prometheus-history "$t" has_prom_history "$SEED_TIME"
   check tempo-by-id       "$t" has_trace_by_id "$RUN" "$TRACE_ID"
-  check tempo-search      "$t" has_trace_in_search "$RUN"
+  local ts=$t
+  if [ -n "${TEMPO_SEARCH_LAG:-}" ]; then   # wait until the seeded trace is old enough to be searched in blocks
+    ts=$(( SEED_TIME + TEMPO_SEARCH_LAG - $(date +%s) )); [ "$ts" -lt "$t" ] && ts=$t
+  fi
+  if [ "$ts" -gt "$t" ] && [ "${OIB_TEST_FULL:-${CI:-}}" != 1 ] && [ "${OIB_TEST_FULL:-${CI:-}}" != true ]; then
+    skip tempo-search "migrated traces become searchable after Tempo 3's 15-minute live window; OIB_TEST_FULL=1 waits ${ts}s, CI always does"
+  else
+    [ "$ts" -gt "$t" ] && log "tempo-search may take up to ${ts}s (Tempo 3 searches blocks only for data older than 15 minutes)"
+    check tempo-search      "$ts" has_trace_in_search "$RUN"
+  fi
   check grafana-dashboard "$t" has_dashboard "$RUN"
   [ "$PROFILING" = with-profiling ] && check pyroscope-data "$t" has_profile "$RUN"
   return 0

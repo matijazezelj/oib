@@ -291,12 +291,12 @@ Create a cron job for regular backups:
 
 What `make backup` does, to plan around:
 - It covers Prometheus, Loki, Tempo, Grafana and (if installed) Pyroscope, not the shared PostgreSQL/Redis volumes.
-- It freezes each component with `docker pause` while archiving its volume, so backups are crash-consistent; the freeze is usually under a second (about 10 s for a 90 MB Grafana volume).
+- It freezes each component with `docker pause` while archiving its volume. Backups are crash-consistent, and the freeze is usually under a second (about 10 s for a 90 MB Grafana volume). Writes acknowledged before the freeze are restored; this is checked by `make test-backup`.
 - Files are written to `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz`, owned by the cron user, and are never pruned; rotate them yourself.
 
 ### Backup Verification
 
-`make test-backup` runs the full cycle on a disposable host (a CI runner or a throwaway VM, **not** the production host, since it deletes all OIB volumes): it writes known logs, a trace, a profile and a Grafana dashboard, runs `make backup`, wipes every volume, reinstalls, runs `make restore-all` and checks that the data and the stack work again. CI runs it on every change to the stacks ([testing/acceptance](../testing/acceptance/README.md)).
+`make test-backup ISOLATED=1` runs the full cycle inside a throwaway Docker-in-Docker daemon, so it never touches the install on the same host (without `ISOLATED=1` it refuses to run next to an install, because it deletes all OIB volumes): it writes known logs, a trace, a profile and a Grafana dashboard, runs `make backup`, wipes every volume, reinstalls, runs `make restore-all` and checks that the data and the stack work again. It takes the backup while data is being written, checks that no component logs corruption or repair on restore, and checks that failed or interrupted backups unpause the container and leave no partial archive. `docker pause` gives a crash-consistent copy, not an application-consistent one. The test shows each backend recovering from it under the tested load. That is observed behaviour, not a guarantee; see "What a backup does and does not guarantee" in the README. For application-consistent backups, stop the stack around `make backup`. CI runs it on every change to the stacks ([testing/acceptance](../testing/acceptance/README.md)).
 
 To check your own archives without touching the live install, extract one into a scratch volume:
 

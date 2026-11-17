@@ -61,6 +61,29 @@ log "running: $(docker ps --filter name=^oib- --format '{{.Image}}' | sort | tr 
 phase "Seed on $FROM"
 seed_run "$STATE" with-profiling
 
+OLD_TEMPO=$(docker inspect -f '{{.Config.Image}}' oib-tempo)
+case "$OLD_TEMPO" in
+  *tempo:2.*|*tempo:v2.*)
+    phase "Tempo 2 -> 3 migration"
+    set +e
+    make --no-print-directory update >"$WORK/update-guarded.log" 2>&1; rc=$?
+    set -e
+    check tempo-guard-blocks-update 1 test "$rc" -ne 0
+    tempo_still_old() { [ "$(docker inspect -f '{{.Config.Image}}' oib-tempo)" = "$OLD_TEMPO" ]; }
+    check tempo-guard-left-tempo-alone 1 tempo_still_old
+    # Migrate while traces keep arriving: every trace Alloy accepted must survive.
+    write_load_start "$WORK/load"
+    sleep 5
+    make --no-print-directory migrate-tempo BACKUP_DIR="$WORK/backups" >"$WORK/migrate-tempo.log" 2>&1 \
+      || { write_load_stop; tail -30 "$WORK/migrate-tempo.log"; die "make migrate-tempo failed"; }
+    MIGRATION_LOAD=1
+    grep -E 'flushed|migrated' "$WORK/migrate-tempo.log" | sed 's/\x1b\[[0-9;]*m//g; s/^/    /'
+    # Tempo 3 searches only its live store for the most recent 15 minutes, so
+    # traces flushed by Tempo 2 become searchable once they are 15 minutes old.
+    export TEMPO_SEARCH_LAG=960
+    ;;
+esac
+
 phase "Upgrade to $(git describe --tags --always --dirty)"
 make --no-print-directory update >"$WORK/update.log" 2>&1 || { tail -30 "$WORK/update.log"; die "make update failed"; }
 make --no-print-directory update-profiling >>"$WORK/update.log" 2>&1 || { tail -30 "$WORK/update.log"; die "make update-profiling failed"; }
@@ -68,8 +91,18 @@ wait_ready with-profiling
 log "running: $(docker ps --filter name=^oib- --format '{{.Image}}' | sort | tr '\n' ' ')"
 [ -n "$EXPECT_LOSS" ] && log "accepted losses for $FROM: $EXPECT_LOSS"
 
+if [ "${MIGRATION_LOAD:-0}" = 1 ]; then
+  write_load_stop
+  LOAD_STOP=$(date +%s%3N)
+  log "traces sent during the migration: $(grep -c ' trace ' "$WORK/load")"
+fi
+
 phase "Verify data from $FROM"
 verify_persisted "$STATE"
+if [ "${MIGRATION_LOAD:-0}" = 1 ]; then
+  check tempo-migration-load 120 load_traces_present "$WORK/load" "$LOAD_STOP"
+  [ -s "$WORK/load-report.txt" ] && sort -u "$WORK/load-report.txt" | sed 's/^/    /'
+fi
 
 phase "Verify the upgraded stack works"
 verify_functional with-profiling

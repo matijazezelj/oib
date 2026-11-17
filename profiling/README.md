@@ -28,8 +28,11 @@ make install-profiling
 # install-profiling recommends restarting Grafana afterwards
 make restart-grafana
 
-# Check status (Pyroscope 2 reports ready about a minute after start)
+# Check status
 make status
+
+# On a brand-new install the first profile takes about a minute to become
+# queryable; after that, profiles show up within a second or two.
 
 # Show the endpoints to configure in your app
 make info-profiling

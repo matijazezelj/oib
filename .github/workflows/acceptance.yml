@@ -4,17 +4,19 @@ name: acceptance
 # trip and an upgrade from each earlier release. See testing/acceptance/README.md.
 
 on:
+  # Run on every change except pure documentation, so new scripts, configs or
+  # directories are covered without having to remember to list them here.
   pull_request:
-    paths:
-      - '**/compose.yaml'
-      - '**/config/**'
-      - 'grafana/provisioning/**'
-      - 'Makefile'
-      - '.env.example'
-      - 'testing/acceptance/**'
-      - '.github/workflows/acceptance.yml'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'completions/**'
   push:
     branches: [main]
+  # Weekly, to notice registry-side changes (moved or deleted image tags).
+  schedule:
+    - cron: '17 4 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -46,6 +48,37 @@ jobs:
           for c in $(docker ps -a --format '{{.Names}}' | grep '^oib-'); do
             echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
           done
+
+  tempo-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: tempo migration recovery
+    steps:
+      - name: Checkout (with tags)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Tempo 2 -> 3 failures, rerun and rollback
+        run: make test-tempo-recovery FROM=v1.0.0
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^oib-'); do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
+          done
+
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: isolated-mode self-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Concurrent, interrupted and killed isolated runs
+        run: make test-isolation
 
   upgrade:
     runs-on: ubuntu-latest

@@ -60,6 +60,17 @@ otelcol.exporter.otlp "tempo" {
       insecure = true
     }
   }
+
+  // While Tempo is down (restart, upgrade, make migrate-tempo) batches wait in an
+  // in-memory queue and are retried. A batch is dropped once it has been retried
+  // for max_elapsed_time, or when the queue is full; a restart of this Alloy
+  // container loses the queue.
+  sending_queue {
+    queue_size = 1000
+  }
+  retry_on_failure {
+    max_elapsed_time = "10m"
+  }
 }
 
 // ==================== Debug (optional) ====================
