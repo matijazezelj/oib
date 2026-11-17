@@ -227,7 +227,7 @@ make backup-pyroscope
 
 What `make backup` does and does not do:
 - Writes `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (use `make backup BACKUP_DIR=/path` for another directory). A component whose volume does not exist is skipped.
-- Stops each component while its volume is archived and starts it again, so the copy is consistent (a few seconds of downtime per component).
+- Freezes each running component with `docker pause` while its volume is archived and unpauses it, so the copy is crash-consistent. The freeze is usually under a second (about 10 s for a 90 MB Grafana volume).
 - Does not cover the shared-services PostgreSQL/Redis volumes.
 
 ### Restore from Backup

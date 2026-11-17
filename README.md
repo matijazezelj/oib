@@ -308,7 +308,7 @@ make latest               # Pull and run :latest versions of all images
 make clean                # docker system prune -f (HOST-WIDE, see below)
 
 # Backup & Restore (see "Backup and Restore" below)
-make backup               # Back up all data volumes (each component pauses briefly)
+make backup               # Back up all data volumes (each component is frozen briefly)
 make restore              # List backups and show restore commands
 make restore-all STAMP=…  # Restore everything from one backup run
 
@@ -592,7 +592,7 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
 ```
 
 - Backups are `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz` (override with `make backup BACKUP_DIR=/path`), owned by the user who ran `make`; `backups/` is git-ignored. One `make backup` run gives every file the same timestamp.
-- Each component is **stopped while its volume is archived** and started again right away, so the backup is consistent. Expect a few seconds of downtime per component; collectors retry, so little or no data is lost.
+- Each running component is **frozen with `docker pause` while its volume is archived** and unpaused right after, so the copy is crash-consistent (the state the databases' write-ahead logs are built to recover from). Measured freeze: under a second for Prometheus, Loki, Tempo and Pyroscope, about 10 s for a 90 MB Grafana volume; Pyroscope then reports not-ready for about a minute while it keeps running. Requests arriving during the freeze wait; collectors retry.
 - Covers Prometheus, Loki, Tempo, Grafana and, when the profiling stack is installed, Pyroscope. The shared-services volumes (PostgreSQL, Redis) are not backed up.
 - `restore-*` asks for confirmation (`YES=1` skips it), checks that the archive is readable, stops that one service, **replaces the current volume contents** with the archive and starts the service again. `FILE` may be relative or absolute. The component's stack must be installed first.
 - `make test-backup` proves the whole cycle on a clean host: it writes known data, backs up, wipes every volume, restores and checks the data is back (see [testing/acceptance](testing/acceptance/README.md)).

@@ -202,9 +202,12 @@ install-grafana: network ## Install Grafana (unified dashboard)
 # Releases before 1.1.0 let Compose name Grafana's volume oib-grafana_oib-grafana-data;
 # since 1.1.0 it is oib-grafana-data. Move the data over so upgrades keep it.
 OLD_GRAFANA_VOLUME := oib-grafana_oib-grafana-data
+# Written into the old volume after a move, so later runs stay quiet
+GRAFANA_MIGRATED_MARKER := .oib-migrated-to-oib-grafana-data
 
 migrate-grafana-volume: ## Move Grafana data from the pre-1.1.0 volume (FORCE=1 replaces existing data)
 	@if ! docker volume inspect $(OLD_GRAFANA_VOLUME) >/dev/null 2>&1; then exit 0; fi; \
+	if [ "$(FORCE)" != "1" ] && docker run --rm -v $(OLD_GRAFANA_VOLUME):/from:ro $(BACKUP_IMAGE) test -f /from/$(GRAFANA_MIGRATED_MARKER); then exit 0; fi; \
 	if docker volume inspect oib-grafana-data >/dev/null 2>&1 && [ "$(FORCE)" != "1" ]; then \
 		echo "$(YELLOW)!$(RESET) Found Grafana data from before 1.1.0 in volume $(OLD_GRAFANA_VOLUME)."; \
 		echo "  The current Grafana uses oib-grafana-data. To bring back the old dashboards, users and"; \
@@ -220,7 +223,8 @@ migrate-grafana-volume: ## Move Grafana data from the pre-1.1.0 volume (FORCE=1 
 	docker rm -f oib-grafana >/dev/null 2>&1 || true; \
 	docker volume create oib-grafana-data >/dev/null && \
 	docker run --rm -v $(OLD_GRAFANA_VOLUME):/from:ro -v oib-grafana-data:/to $(BACKUP_IMAGE) \
-		sh -c "find /to -mindepth 1 -delete && cp -a /from/. /to/" || { echo "$(RED)✗ Grafana volume migration failed$(RESET)"; exit 1; }; \
+		sh -c "find /to -mindepth 1 -delete && cp -a /from/. /to/ && rm -f /to/$(GRAFANA_MIGRATED_MARKER)" || { echo "$(RED)✗ Grafana volume migration failed$(RESET)"; exit 1; }; \
+	docker run --rm -v $(OLD_GRAFANA_VOLUME):/from $(BACKUP_IMAGE) touch /from/$(GRAFANA_MIGRATED_MARKER) || true; \
 	echo "$(GREEN)✓$(RESET) Grafana data moved. The old volume is kept; remove it once you are happy:"; \
 	echo "  docker volume rm $(OLD_GRAFANA_VOLUME)"
 
@@ -1154,8 +1158,9 @@ test-upgrade: ## Install FROM=<tag> (default: latest release), upgrade, verify d
 #
 # Every component keeps its data in the volume oib-<component>-data and runs
 # as the container oib-<component> in the stack directory below.
-# Each component is stopped while its volume is archived, so the backup is
-# consistent; it is started again right after (a few seconds of downtime).
+# Each running component is frozen with `docker pause` while its volume is
+# archived, so the copy is crash-consistent (what the databases' write-ahead logs
+# are built to recover from); it is unpaused right after, usually within a second.
 
 BACKUP_DIR := ./backups
 TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
@@ -1176,12 +1181,13 @@ echo "$(CYAN)Backing up $(1)...$(RESET)"; \
 if ! docker volume inspect oib-$(1)-data >/dev/null 2>&1; then \
 	echo "  $(YELLOW)!$(RESET) oib-$(1)-data volume not found (skipped)"; exit 0; \
 fi; \
-running=$$(docker ps -q -f name=^oib-$(1)$$); \
-if [ -n "$$running" ]; then (cd $($(1)_STACK) && $(DOCKER_COMPOSE) stop $(1)) >/dev/null 2>&1; fi; \
+running=$$(docker ps -q -f name=^oib-$(1)$$ -f status=running); \
+if [ -n "$$running" ]; then docker pause oib-$(1) >/dev/null || exit 1; \
+	trap 'docker unpause oib-$(1) >/dev/null 2>&1; exit 130' INT TERM; fi; \
 out="$(1)_$(TIMESTAMP).tar.gz"; \
 docker run --rm -v oib-$(1)-data:/data:ro -v "$(abspath $(BACKUP_DIR))":/backup $(BACKUP_IMAGE) \
 	sh -c "tar czf /backup/$$out -C /data . && chown $(HOST_UID):$(HOST_GID) /backup/$$out"; rc=$$?; \
-if [ -n "$$running" ]; then (cd $($(1)_STACK) && $(DOCKER_COMPOSE) start $(1)) >/dev/null 2>&1; fi; \
+if [ -n "$$running" ]; then docker unpause oib-$(1) >/dev/null; fi; \
 if [ $$rc -ne 0 ]; then echo "  $(RED)✗$(RESET) $(1) backup failed"; exit $$rc; fi; \
 echo "  $(GREEN)✓$(RESET) $(1): $(BACKUP_DIR)/$$out"
 endef
@@ -1209,7 +1215,7 @@ echo "$(CYAN)Starting $(1)...$(RESET)"; \
 echo "$(GREEN)✓ $(1) restored from $(2)$(RESET)"
 endef
 
-backup: ## Backup all OIB data volumes (each component pauses briefly)
+backup: ## Backup all OIB data volumes (each component is frozen briefly)
 	@echo ""
 	@echo "$(BOLD)💾 Backing up all OIB data...$(RESET)"
 	@echo ""

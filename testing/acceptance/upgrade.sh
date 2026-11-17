@@ -74,4 +74,13 @@ verify_persisted "$STATE"
 phase "Verify the upgraded stack works"
 verify_functional with-profiling
 
+phase "Update again (must be a quiet no-op for data)"
+make --no-print-directory update >"$WORK/update2.log" 2>&1 || { tail -30 "$WORK/update2.log"; die "second make update failed"; }
+wait_ready
+no_migration_nag() { ! grep -q 'Found Grafana data from before' "$WORK/update2.log"; }
+check no-migration-warning 1 no_migration_nag
+# shellcheck disable=SC1090
+. "$STATE"
+check grafana-dashboard-after-second-update 60 has_dashboard "$RUN"
+
 summary

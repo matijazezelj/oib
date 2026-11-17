@@ -291,7 +291,7 @@ Create a cron job for regular backups:
 
 What `make backup` does, to plan around:
 - It covers Prometheus, Loki, Tempo, Grafana and (if installed) Pyroscope, not the shared PostgreSQL/Redis volumes.
-- It stops each component while archiving its volume, so backups are consistent, at the cost of a few seconds of downtime per component.
+- It freezes each component with `docker pause` while archiving its volume, so backups are crash-consistent; the freeze is usually under a second (about 10 s for a 90 MB Grafana volume).
 - Files are written to `./backups/<component>_YYYYMMDD_HHMMSS.tar.gz`, owned by the cron user, and are never pruned; rotate them yourself.
 
 ### Backup Verification

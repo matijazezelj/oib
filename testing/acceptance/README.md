@@ -56,6 +56,7 @@ Checks retry for up to 120 s (`VERIFY_TIMEOUT`), because data takes a few second
 2. Seed a run on the old release.
 3. Upgrade the way users do: `make update` and `make update-profiling` from the current checkout.
 4. The data checks and functional checks must pass.
+5. Run `make update` a second time. It must not print the Grafana migration warning, and the seeded dashboard must still be there.
 
 Losses that are known and accepted for a starting release are listed in [`upgrade-expectations`](upgrade-expectations). They are reported as `XFAIL` and do not fail the run. If a listed check passes, it is reported as `XPASS`; remove it from the list. Any loss not listed fails the test.
 
