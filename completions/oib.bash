@@ -15,7 +15,7 @@ _oib_completions() {
 
     # Check if we're in OIB directory
     if [[ -f Makefile ]] && grep -q "Observability in a Box" Makefile 2>/dev/null; then
-        local targets="install install-grafana install-logging install-metrics install-telemetry install-profiling install-services \
+        local targets="install install-grafana install-logging install-metrics install-telemetry install-profiling install-services install-mcp mcp-config logs-mcp \
             preflight network \
             start stop restart status info logs \
             start-grafana stop-grafana restart-grafana logs-grafana info-grafana \
@@ -26,13 +26,13 @@ _oib_completions() {
             start-services stop-services restart-services logs-services info-services \
             health doctor check-ports ps validate \
             demo demo-app demo-app-stop demo-traffic demo-examples \
-            test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-isolation test-restricted \
+            test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-mcp test-isolation test-restricted \
             open disk-usage version bootstrap \
             update update-grafana update-logging update-metrics update-telemetry update-profiling latest clean \
             backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
             restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope \
             migrate-grafana-volume migrate-tempo rollback-tempo \
-            uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
+            uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services uninstall-mcp \
             help"
         COMPREPLY=($(compgen -W "$targets" -- "$cur"))
     elif declare -F _comp_cmd_make >/dev/null; then

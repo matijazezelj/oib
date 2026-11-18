@@ -115,13 +115,31 @@ Checks restricted mode (`OIB_MODE=restricted`, see [restricted mode](../../docs/
 
 Switching modes rewrites `.env`, so the test runs on a copy of the checkout and never edits yours; it checks at the end that your `.env` is unchanged.
 
+## `mcp.sh` (`make test-mcp`)
+
+Installs the core stacks and the MCP endpoint (`make install-mcp`), writes a known log line and trace, and checks:
+1. **Access control:**
+   - no token or a wrong token: `401`;
+   - a foreign `Host` header or a browser `Origin`: `403`;
+   - the token file is `0600` in a `0700` directory.
+2. **Read-only:**
+   - the read tools are there, and no tool is registered that the server marks as writable or destructive, or whose name says it writes (`create_`, `update_`, `delete_`…) without a read-only mark;
+   - the `oib-mcp` service account has the Viewer role, can read, and gets `403` when it tries to save a dashboard or create a service account.
+3. **It answers from OIB's data:** through MCP tool calls, the seeded log line comes back from Loki, `up{job="prometheus"}` from Prometheus, and the seeded trace from Tempo, both by ID and by TraceQL search.
+4. **Repair, reinstall and uninstall:**
+   - With the Grafana token revoked (as after a Grafana restore) and the service account raised to Editor, queries fail.
+   - A second `make install-mcp` keeps the client token, sets the role back to Viewer, and makes queries work again.
+   - `make uninstall-mcp` removes the container and the tokens.
+
+The test runs on a copy of the checkout, so a real install's `mcp/secrets/` is never touched; it checks that at the end.
+
 ## Debugging
 
 `KEEP=1 make test-backup` (or `test-upgrade`) leaves the stack running and keeps the temporary directory (backups, logs, `state` with the run ID and trace ID). Clean up afterwards with `make uninstall-profiling; make uninstall YES=1`.
 
 ## CI
 
-[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, the Tempo recovery test, the restricted-mode test, the isolation self-test, and the upgrade test from every release in its matrix. It runs:
+[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, the Tempo recovery test, the restricted-mode test, the MCP endpoint test, the isolation self-test, and the upgrade test from every release in its matrix. It runs:
 - on every pull request except those that change only documentation (`*.md`, `docs/`, `LICENSE`, `completions/`);
 - on pushes to `main`;
 - weekly, to catch registry-side changes such as moved or deleted image tags.

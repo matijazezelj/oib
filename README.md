@@ -381,6 +381,9 @@ oib/
 ├── profiling/
 │   ├── README.md               # Profiling stack documentation
 │   └── compose.yaml            # Pyroscope (optional)
+├── mcp/
+│   ├── compose.yaml            # Read-only MCP endpoint for AI agents (optional)
+│   └── provision.sh            # Viewer service account and tokens (make install-mcp)
 ├── services/
 │   ├── compose.yaml            # PostgreSQL + Redis (optional)
 │   └── init/                   # Database schema and seed data (also used by the demo app)
@@ -516,6 +519,47 @@ docker compose --profile test run --rm \
 ```
 
 See [testing/README.md](testing/README.md) for custom test scripts.
+
+## 🤖 AI Agents (MCP)
+
+`make install-mcp` adds an optional, read-only [MCP](https://modelcontextprotocol.io) endpoint. Through it, AI agents such as [hib](https://github.com/matijazezelj/hib), Claude Code or Codex can query OIB's data while they help you debug:
+- logs (LogQL)
+- metrics (PromQL)
+- traces (TraceQL and lookup by ID)
+- profiles
+- dashboards and alert rules
+
+```bash
+make install-mcp    # needs Grafana running; prints the client setup below
+make mcp-config     # show it again
+```
+
+It is [Grafana's MCP server](https://github.com/grafana/mcp-grafana) (`oib-mcp-grafana`), listening on `http://127.0.0.1:3030/mcp` (`MCP_PORT`).
+
+- **Read-only, twice over:**
+  - Write tools are not registered (`--disable-write`), and only the categories that read OIB's data are enabled.
+  - It queries through a Grafana service account (`oib-mcp`) that has only the Viewer role, which Grafana lets read but not change anything. `make install-mcp` sets the role back to Viewer if it was changed, and replaces the Grafana token if it stopped working (after a Grafana restore or reinstall, say).
+- **Authenticated:**
+  - Clients must send `Authorization: Bearer <token>`. The token is generated at install and kept in `mcp/secrets/mcp.env` (mode 0600, not committed); reinstalling keeps it.
+  - Requests with a foreign `Host` header or a browser `Origin` are rejected, which blocks DNS-rebinding attacks from web pages.
+- **Localhost only**, like the other APIs. It runs non-root with a read-only filesystem and no capabilities.
+- `make uninstall-mcp` removes the container and the tokens.
+- `make test-mcp` checks all of the above, and that queries through MCP return known logs, metrics and traces. CI runs it on every change.
+
+**Connecting hib.** hib releases with trusted MCP servers (hib PR #28) take an `[mcp.oib]` block in `~/.hib/config.toml`, which `make mcp-config` prints.
+- hib's daemon then calls the endpoint itself and keeps the token.
+- It offers the agent, without prompts, only tools that are on the block's `tools` list and also marked read-only by the server. The list leaves out tools that could expose secrets or author names, such as alerting contact points and dashboard versions.
+- It runs every result through its guard (IPs, emails, secrets and user fields become tokens), and also works in sensitive folders.
+- It hides any same-named server from your Claude or Codex config in its sessions.
+
+Older hib releases use the unguarded route below.
+
+hib's agent sessions run Claude Code or Codex with your user-level MCP servers. Register the endpoint once with the command `make mcp-config` prints (`claude mcp add --scope user --transport http oib …`), then ask hib things like "why did checkout errors jump in the last hour?".
+- **Claude accounts:** the command covers hib's default Claude account. For an account with its own `CLAUDE_CONFIG_DIR`, run it again with that variable set.
+- **Codex:** use the `[mcp_servers.oib]` block it prints. hib passes Codex only its account's environment, so put `OIB_MCP_TOKEN` in that account's `env` in `~/.hib/config.toml`. This path is untested.
+- **Approvals:** hib asks before each MCP call, because "Always" for an MCP tool covers only that exact call.
+- **What leaves the machine:** what the tools return goes to the model provider like any other tool output, so treat logs with personal data accordingly.
+- **Sensitive folders:** hib's sensitive folders deliberately load no MCP servers but hib's own.
 
 ## 🌐 Network
 

@@ -34,6 +34,7 @@ jobs:
             metrics/compose.yaml \
             telemetry/compose.yaml \
             profiling/compose.yaml \
+            mcp/compose.yaml \
             services/compose.yaml \
             testing/compose.yaml \
             examples/demo-app/compose.yaml \

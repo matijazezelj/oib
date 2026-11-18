@@ -87,6 +87,24 @@ jobs:
             echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
           done
 
+  mcp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: MCP endpoint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read-only, authenticated, answers from OIB data
+        run: make test-mcp
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^oib-'); do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
+          done
+
   isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 20

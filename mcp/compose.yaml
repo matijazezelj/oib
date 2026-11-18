@@ -1,0 +1,57 @@
+name: oib-mcp
+
+# Read-only MCP endpoint over OIB's data, for AI agents (hib, Claude Code, Codex).
+# Grafana's own MCP server queries Prometheus, Loki, Tempo and Pyroscope through
+# Grafana, using a service account that has only the Viewer role. Install with
+# `make install-mcp`; `make mcp-config` prints how to connect a client.
+#
+# Read-only twice over: write tools are not registered (--disable-write), and
+# the Viewer service account cannot change anything in Grafana anyway.
+services:
+  mcp-grafana:
+    image: grafana/mcp-grafana:${MCP_GRAFANA_VERSION:-2.3.0}
+    container_name: oib-mcp-grafana
+    # Written by mcp/provision.sh (make install-mcp): the Grafana service account
+    # token and the bearer token MCP clients must send. Not committed.
+    env_file:
+      - path: ./secrets/mcp.env
+        required: false   # so `docker compose config` works before the first install
+    environment:
+      - GRAFANA_URL=http://oib-grafana:3000
+    ports:
+      - "127.0.0.1:${MCP_PORT:-3030}:8000"
+    entrypoint: ["/app/mcp-grafana"]
+    command:
+      - --transport=streamable-http
+      - --address=0.0.0.0:8000
+      # Clients connect through the published port; reject any other Host header
+      # (DNS rebinding). Requests with an Origin header (browsers) are rejected.
+      - --allowed-hosts=127.0.0.1:${MCP_PORT:-3030},localhost:${MCP_PORT:-3030}
+      - --disable-write
+      # Only the categories that read OIB's own data.
+      - --enabled-tools=search,datasource,prometheus,loki,tempo,pyroscope,alerting,dashboard,navigation
+      - --server-name=oib
+    networks:
+      - oib-network
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 10s
+    # No shell or HTTP client in the image: health is checked from the host
+    # (make health, make install-mcp) at /healthz.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 32M
+
+networks:
+  oib-network:
+    external: true
