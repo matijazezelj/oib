@@ -63,13 +63,14 @@ Checks retry for up to 120 s (`VERIFY_TIMEOUT`), because data takes a few second
    - A backup whose `tar` fails must exit non-zero.
    - A backup interrupted with Ctrl+C (SIGINT to the process group) must clean up.
    - A backup killed with `kill -9` must be healed by the next backup.
-4. `make backup` into a temporary directory **while a background writer keeps pushing logs and spans**, recording each write the backend acknowledged and when each component's backup started. Every archive must exist and be owned by the invoking user.
+4. `make backup` into a temporary directory **while a background writer keeps pushing logs and spans**, recording each write the backend acknowledged and when each component's backup started. The writer records a write when its request returns, not when it is sent: a push still in flight when a component is frozen is acknowledged only after the unpause, and is rightly not in the archive. Every archive must exist and be owned by the invoking user.
+   - **Control** `loki-load-live-before-wipe`: every acknowledged line is in the live Loki before the wipe, so a line missing later is the backup's fault.
 5. Delete every volume, reinstall on fresh volumes.
 6. **Control:** the seeded data must now be missing. This proves the checks can fail and that the later pass comes from the restore.
 7. `make restore-all STAMP=... YES=1`.
 8. **Clean recovery and no lost writes:**
    - `restore-clean-recovery`: no restored component may log corruption, repair, checksum or WAL replay errors while starting from the archive. The exception is a short, documented list of messages where a component recovers by itself from a derived file caught mid-write (`RECOVERY_SELF_HEALING` in `data.sh`). These are printed as notes, and the data checks still decide whether anything was lost.
-   - `loki-load-before-backup`: every log line Loki acknowledged before its freeze must be back.
+   - `loki-load-before-backup`: every log line Loki acknowledged before its freeze must be back. A failure lists each missing line and how long before the freeze it was acknowledged, followed by Loki's WAL-replay log.
    - `tempo-load-before-backup`: every trace sent more than 10 s before Tempo's freeze must open by ID. The 10 s allow for Alloy's batching.
 9. The data checks and functional checks must pass.
 

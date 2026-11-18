@@ -70,6 +70,10 @@ for c in prometheus loki tempo grafana pyroscope; do
   [ -O "$WORK/backups/${c}_$STAMP.tar.gz" ] || die "backup file not owned by the invoking user: ${c}_$STAMP.tar.gz"
 done
 wait_ready with-profiling   # every component was paused during its backup
+# Control: every acknowledged load line is in the live Loki before the wipe. If
+# this fails, a missing line later is not the backup's fault.
+check loki-load-live-before-wipe 60 load_logs_present "$WORK/load" "$(date +%s%3N)"
+[ -s "$WORK/load-report.txt" ] && { sed 's/^/    /' "$WORK/load-report.txt"; : >"$WORK/load-report.txt"; }
 
 phase "Wipe and reinstall"
 teardown_all
@@ -89,12 +93,16 @@ check restore-clean-recovery 1 no_recovery_errors "$RESTORE_SINCE"
 [ -s "$WORK/recovery-errors.txt" ] && cat "$WORK/recovery-errors.txt"
 if [ -s "$WORK/recovery-notes.txt" ]; then log "self-healing recovery messages (not failures):"; cat "$WORK/recovery-notes.txt"; fi
 # Writes acknowledged before a component's backup started must be in its archive.
-# Loki acknowledges a push once it is stored; spans travel through Alloy's batch
-# processor first, so traces get a 10 s allowance.
+# Loki acknowledges a push once it is in its WAL; spans travel through Alloy's
+# batch processor first, so traces get a 10 s allowance.
 started() { awk -v c="$1" '$2 == c { print $1; exit }' "$WORK/backup-starts"; }
 check loki-load-before-backup   60 load_logs_present   "$WORK/load" "$(started loki)"
 check tempo-load-before-backup  60 load_traces_present "$WORK/load" "$(( $(started tempo) - 10000 ))"
-[ -s "$WORK/load-report.txt" ] && sort -u "$WORK/load-report.txt" | sed 's/^/    /'
+if [ -s "$WORK/load-report.txt" ]; then
+  sed 's/^/    /' "$WORK/load-report.txt"
+  log "Loki's WAL replay after the restore:"
+  docker logs --since "$RESTORE_SINCE" oib-loki 2>&1 | grep -iE 'wal|replay|recover|checkpoint' | cut -c1-240 | tail -15 | sed 's/^/    /'
+fi
 
 phase "Verify restored data"
 verify_persisted "$STATE"
