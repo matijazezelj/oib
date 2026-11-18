@@ -548,7 +548,7 @@ It is [Grafana's MCP server](https://github.com/grafana/mcp-grafana) (`oib-mcp-g
 - `make uninstall-mcp` removes the container and the tokens.
 - `make test-mcp` checks all of the above, and that queries through MCP return known logs, metrics and traces. CI runs it on every change.
 
-**Connecting hib.** hib releases with trusted MCP servers (hib PR #28) take an `[mcp.oib]` block in `~/.hib/config.toml`, which `make mcp-config` prints.
+**Connecting hib.** hib versions with trusted MCP servers (merged into hib main in hib #28, not yet in a release) take an `[mcp.oib]` block in `~/.hib/config.toml`, which `make mcp-config` prints.
 - hib's daemon then calls the endpoint itself and keeps the token.
 - It offers the agent, without prompts, only tools that are on the block's `tools` list and also marked read-only by the server. The list leaves out tools that could expose secrets or author names, such as alerting contact points and dashboard versions.
 - It runs every result through its guard (IPs, emails, secrets and user fields become tokens), and also works in sensitive folders.
@@ -576,7 +576,7 @@ make ask Q="..." MODEL=claude@default/sonnet
 - **Tools:**
   - The agent can use only the guarded OIB tools.
   - Anything that would need your approval, such as file edits, commands or other network hosts, is denied, and the command exits with status 3.
-- **Requirements:** a hib with `hib ask --workspace` (hib PR #29), the `[mcp.oib]` block in its config, and `make install-mcp`.
+- **Requirements:** a hib with `hib ask --workspace` (hib #32, not yet in a release), the `[mcp.oib]` block in its config, and `make install-mcp`.
 
 `make test-ask` checks it end to end on this machine; it needs hib and a logged-in Claude, so it doesn't run in CI. See [testing/acceptance/README.md](testing/acceptance/README.md#ask-hibsh-make-test-ask).
 
