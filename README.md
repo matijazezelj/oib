@@ -546,7 +546,15 @@ It is [Grafana's MCP server](https://github.com/grafana/mcp-grafana) (`oib-mcp-g
 - `make uninstall-mcp` removes the container and the tokens.
 - `make test-mcp` checks all of the above, and that queries through MCP return known logs, metrics and traces. CI runs it on every change.
 
-**Connecting hib.** hib's agent sessions run Claude Code or Codex with your user-level MCP servers. Register the endpoint once with the command `make mcp-config` prints (`claude mcp add --scope user --transport http oib …`), then ask hib things like "why did checkout errors jump in the last hour?".
+**Connecting hib.** hib releases with trusted MCP servers (hib PR #28) take an `[mcp.oib]` block in `~/.hib/config.toml`, which `make mcp-config` prints.
+- hib's daemon then calls the endpoint itself and keeps the token.
+- It offers the agent only tools marked read-only, without prompts.
+- It runs every result through its guard (IPs, emails, secrets and user fields become tokens), and also works in sensitive folders.
+- It hides any same-named server from your Claude or Codex config in its sessions.
+
+Older hib releases use the unguarded route below.
+
+hib's agent sessions run Claude Code or Codex with your user-level MCP servers. Register the endpoint once with the command `make mcp-config` prints (`claude mcp add --scope user --transport http oib …`), then ask hib things like "why did checkout errors jump in the last hour?".
 - **Claude accounts:** the command covers hib's default Claude account. For an account with its own `CLAUDE_CONFIG_DIR`, run it again with that variable set.
 - **Codex:** use the `[mcp_servers.oib]` block it prints. hib passes Codex only its account's environment, so put `OIB_MCP_TOKEN` in that account's `env` in `~/.hib/config.toml`. This path is untested.
 - **Approvals:** hib asks before each MCP call, because "Always" for an MCP tool covers only that exact call.
