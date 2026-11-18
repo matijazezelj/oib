@@ -548,7 +548,7 @@ It is [Grafana's MCP server](https://github.com/grafana/mcp-grafana) (`oib-mcp-g
 
 **Connecting hib.** hib releases with trusted MCP servers (hib PR #28) take an `[mcp.oib]` block in `~/.hib/config.toml`, which `make mcp-config` prints.
 - hib's daemon then calls the endpoint itself and keeps the token.
-- It offers the agent only tools marked read-only, without prompts.
+- It offers the agent, without prompts, only tools that are on the block's `tools` list and also marked read-only by the server. The list leaves out tools that could expose secrets or author names, such as alerting contact points and dashboard versions.
 - It runs every result through its guard (IPs, emails, secrets and user fields become tokens), and also works in sensitive folders.
 - It hides any same-named server from your Claude or Codex config in its sessions.
 
