@@ -108,7 +108,12 @@ Installs the core stacks and the MCP endpoint (`make install-mcp`), writes a kno
    - the read tools are there, and no tool is registered that the server marks as writable or destructive, or whose name says it writes (`create_`, `update_`, `delete_`…) without a read-only mark;
    - the `oib-mcp` service account has the Viewer role, can read, and gets `403` when it tries to save a dashboard or create a service account.
 3. **It answers from OIB's data:** through MCP tool calls, the seeded log line comes back from Loki, `up{job="prometheus"}` from Prometheus, and the seeded trace from Tempo, both by ID and by TraceQL search.
-4. **Reinstall and uninstall:** a second `make install-mcp` keeps the client token and still answers, and `make uninstall-mcp` removes the container and the tokens.
+4. **Repair, reinstall and uninstall:**
+   - With the Grafana token revoked (as after a Grafana restore) and the service account raised to Editor, queries fail.
+   - A second `make install-mcp` keeps the client token, sets the role back to Viewer, and makes queries work again.
+   - `make uninstall-mcp` removes the container and the tokens.
+
+The test runs on a copy of the checkout, so a real install's `mcp/secrets/` is never touched; it checks that at the end.
 
 ## Debugging
 

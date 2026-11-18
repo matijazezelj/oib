@@ -391,7 +391,7 @@ mcp-config: ## Show how to connect hib, Claude Code or Codex to the MCP endpoint
 	@echo "  URL:    $(YELLOW)$(MCP_URL)/mcp$(RESET)  (streamable HTTP, bearer token required)"
 	@echo "  Token:  $(YELLOW)$(CURDIR)/mcp/secrets/mcp.env$(RESET) (MCP_GRAFANA_SERVER_TOKEN)"
 	@echo ""
-	@echo "$(GREEN)Claude Code (and hib's Claude sessions):$(RESET)"
+	@echo "$(GREEN)Claude Code (and hib's Claude sessions on the default account):$(RESET)"
 	@echo "  claude mcp add --scope user --transport http oib $(MCP_URL)/mcp \\"
 	@echo "    --header \"Authorization: Bearer \$$(sed -n 's/^MCP_GRAFANA_SERVER_TOKEN=//p' $(CURDIR)/mcp/secrets/mcp.env)\""
 	@echo ""
@@ -399,7 +399,11 @@ mcp-config: ## Show how to connect hib, Claude Code or Codex to the MCP endpoint
 	@echo "  [mcp_servers.oib]"
 	@echo "  url = \"$(MCP_URL)/mcp\""
 	@echo "  bearer_token_env_var = \"OIB_MCP_TOKEN\""
-	@echo "  (export OIB_MCP_TOKEN with the token above in the shell that starts codex or hib)"
+	@echo "  Plain codex: export OIB_MCP_TOKEN with the token above. hib passes Codex only its account's"
+	@echo "  env, so under hib add OIB_MCP_TOKEN to that account's env in ~/.hib/config.toml (untested)."
+	@echo ""
+	@echo "  A hib account with its own CLAUDE_CONFIG_DIR: run the claude mcp add line with that"
+	@echo "  CLAUDE_CONFIG_DIR set. hib asks before each MCP call."
 	@echo ""
 
 uninstall-mcp: ## Remove the MCP endpoint and its tokens
@@ -506,6 +510,7 @@ uninstall: ## Remove all stacks and volumes (with confirmation)
 	@$(MAKE) --no-print-directory uninstall-logging
 	@$(MAKE) --no-print-directory uninstall-metrics
 	@$(MAKE) --no-print-directory uninstall-telemetry
+	@if docker inspect oib-mcp-grafana >/dev/null 2>&1; then $(MAKE) --no-print-directory uninstall-mcp; fi
 	@docker network rm oib-network 2>/dev/null || true
 	@echo "$(GREEN)✓ All stacks removed$(RESET)"
 

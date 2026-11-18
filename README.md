@@ -538,7 +538,7 @@ It is [Grafana's MCP server](https://github.com/grafana/mcp-grafana) (`oib-mcp-g
 
 - **Read-only, twice over:**
   - Write tools are not registered (`--disable-write`), and only the categories that read OIB's data are enabled.
-  - It queries through a Grafana service account (`oib-mcp`) that has only the Viewer role, so Grafana itself refuses any change. `make install-mcp` resets the role to Viewer every time.
+  - It queries through a Grafana service account (`oib-mcp`) that has only the Viewer role, which Grafana lets read but not change anything. `make install-mcp` sets the role back to Viewer if it was changed, and replaces the Grafana token if it stopped working (after a Grafana restore or reinstall, say).
 - **Authenticated:**
   - Clients must send `Authorization: Bearer <token>`. The token is generated at install and kept in `mcp/secrets/mcp.env` (mode 0600, not committed); reinstalling keeps it.
   - Requests with a foreign `Host` header or a browser `Origin` are rejected, which blocks DNS-rebinding attacks from web pages.
@@ -546,10 +546,12 @@ It is [Grafana's MCP server](https://github.com/grafana/mcp-grafana) (`oib-mcp-g
 - `make uninstall-mcp` removes the container and the tokens.
 - `make test-mcp` checks all of the above, and that queries through MCP return known logs, metrics and traces. CI runs it on every change.
 
-**Connecting hib.** hib's agent sessions run Claude Code or Codex with your user-level MCP servers. So register the endpoint once with the command `make mcp-config` prints (`claude mcp add --scope user --transport http oib …`, or a `[mcp_servers.oib]` block for Codex). Then ask hib things like "why did checkout errors jump in the last hour?".
-- hib asks before each MCP call; approve with "always" for the read-only tools you trust.
-- What the tools return goes to the model provider like any other tool output, so treat logs with personal data accordingly.
-- hib's sensitive folders deliberately load no MCP servers but hib's own.
+**Connecting hib.** hib's agent sessions run Claude Code or Codex with your user-level MCP servers. Register the endpoint once with the command `make mcp-config` prints (`claude mcp add --scope user --transport http oib …`), then ask hib things like "why did checkout errors jump in the last hour?".
+- **Claude accounts:** the command covers hib's default Claude account. For an account with its own `CLAUDE_CONFIG_DIR`, run it again with that variable set.
+- **Codex:** use the `[mcp_servers.oib]` block it prints. hib passes Codex only its account's environment, so put `OIB_MCP_TOKEN` in that account's `env` in `~/.hib/config.toml`. This path is untested.
+- **Approvals:** hib asks before each MCP call, because "Always" for an MCP tool covers only that exact call.
+- **What leaves the machine:** what the tools return goes to the model provider like any other tool output, so treat logs with personal data accordingly.
+- **Sensitive folders:** hib's sensitive folders deliberately load no MCP servers but hib's own.
 
 ## 🌐 Network
 

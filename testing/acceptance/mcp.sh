@@ -8,8 +8,12 @@
 #      with the endpoint's service-account token (Viewer role)
 #   4. it answers from OIB's data: the seeded log line (Loki), a Prometheus
 #      series, and the seeded trace (Tempo) through the MCP tools
-#   5. make install-mcp again keeps the client token and still works;
-#      make uninstall-mcp removes the container and the tokens
+#   5. make install-mcp repairs a revoked Grafana token and a service account
+#      whose role was raised, and keeps the client token; make uninstall-mcp
+#      removes the container and the tokens
+#
+# The test runs on a copy of the checkout: install-mcp and uninstall-mcp
+# rewrite and delete mcp/secrets/, which must never touch a real install's tokens.
 #
 # Usage: testing/acceptance/mcp.sh     (or: make test-mcp [ISOLATED=1])
 
@@ -24,6 +28,16 @@ cd "$ROOT" || exit 1
 guard_clean_host
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/oib-mcp-test.XXXXXX")
+
+# Work on a copy of the checkout (see above); record the real secrets to check
+# at the end that they are untouched.
+secrets_sum() { if [ -d "$1" ]; then (cd "$1" && find . -type f -exec cksum {} + | sort); else echo none; fi; }
+HOST_SECRETS="$ROOT/mcp/secrets"; HOST_SECRETS_SUM=$(secrets_sum "$HOST_SECRETS")
+mkdir "$WORK/tree"
+tar -C "$ROOT" --exclude=./.git --exclude=./mcp/secrets -cf - . | tar -C "$WORK/tree" -xf - || die "copying the checkout failed"
+ROOT="$WORK/tree"; ENV_FILE="$ROOT/.env"
+cd "$ROOT" || exit 1
+
 cleanup() {
   local rc=$?
   if [ "${KEEP:-0}" = 1 ]; then
@@ -32,8 +46,8 @@ cleanup() {
     phase "Cleanup"
     make --no-print-directory uninstall-mcp >/dev/null 2>&1 || true
     teardown_all
-    rm -rf "$WORK"
   fi
+  [ "${KEEP:-0}" = 1 ] || rm -rf "$WORK"
   cleanup_env
   exit $rc
 }
@@ -113,6 +127,23 @@ sa_is_viewer() {
   curl -fsS -u "$GRAFANA_AUTH" "$GRAFANA/api/serviceaccounts/search?query=oib-mcp" \
     | jq -e '[.serviceAccounts[] | select(.name == "oib-mcp")] | length == 1 and .[0].role == "Viewer"' >/dev/null
 }
+sa_id() {
+  curl -fsS -u "$GRAFANA_AUTH" "$GRAFANA/api/serviceaccounts/search?query=oib-mcp" \
+    | jq -r '.serviceAccounts[] | select(.name == "oib-mcp") | .id'
+}
+revoke_sa_tokens() {
+  local id t; id=$(sa_id)
+  for t in $(curl -fsS -u "$GRAFANA_AUTH" "$GRAFANA/api/serviceaccounts/$id/tokens" | jq -r '.[].id'); do
+    curl -fsS -o /dev/null -u "$GRAFANA_AUTH" -X DELETE "$GRAFANA/api/serviceaccounts/$id/tokens/$t" || return 1
+  done
+}
+raise_sa_role() {
+  curl -fsS -o /dev/null -u "$GRAFANA_AUTH" -X PATCH -H 'Content-Type: application/json' \
+    "$GRAFANA/api/serviceaccounts/$(sa_id)" --data '{"role":"Editor"}'
+}
+prom_call_ok() { call_contains '"prometheus"' query_prometheus '{"datasourceUid":"prometheus","expr":"up{job=\"prometheus\"}","queryType":"instant","endTime":"now"}'; }
+prom_call_fails() { mcp_init && ! prom_call_ok; }
+host_secrets_unchanged() { [ "$(secrets_sum "$HOST_SECRETS")" = "$HOST_SECRETS_SUM" ]; }
 secrets_private() {
   [ "$(stat -c '%a' "$ROOT/mcp/secrets" 2>/dev/null || stat -f '%Lp' "$ROOT/mcp/secrets")" = 700 ] \
     && [ "$(stat -c '%a' "$SECRETS" 2>/dev/null || stat -f '%Lp' "$SECRETS")" = 600 ]
@@ -157,13 +188,22 @@ check mcp-tempo-search        60 call_contains "oib-acceptance-$RUN" search_temp
   "$(jq -cn --arg q "{ resource.service.name = \"oib-acceptance-$RUN\" }" '{datasourceUid:"tempo", query:$q}')"
 [ "$FAILED" -gt 0 ] && [ -s "$WORK/text" ] && { log "last tool output:"; head -c 1500 "$WORK/text" | sed 's/^/      /'; echo; }
 
-phase "5. Reinstall and uninstall"
+phase "5. Repair, reinstall and uninstall"
+# As after a Grafana restore or reinstall: the saved Grafana token no longer
+# works (the endpoint stays healthy, every query fails), and someone raised the
+# service account's role.
+revoke_sa_tokens || die "revoking the service account's tokens failed"
+raise_sa_role || die "raising the service account's role failed"
+check revoked-token-breaks-queries 30 prom_call_fails
 before=$(token MCP_GRAFANA_SERVER_TOKEN)
 make --no-print-directory install-mcp >"$WORK/reinstall-mcp.log" 2>&1 || { tail -30 "$WORK/reinstall-mcp.log"; die "second make install-mcp failed"; }
 check reinstall-keeps-client-token  1 test "$(token MCP_GRAFANA_SERVER_TOKEN)" = "$before"
+check reinstall-resets-role-to-viewer 10 sa_is_viewer
 check reinstall-still-answers      60 mcp_init
+check reinstall-queries-work       60 prom_call_ok
 make --no-print-directory uninstall-mcp >"$WORK/uninstall-mcp.log" 2>&1 || { tail -30 "$WORK/uninstall-mcp.log"; die "make uninstall-mcp failed"; }
 check uninstall-removes-container  10 test -z "$(docker ps -aq --filter name=^oib-mcp-grafana$)"
 check uninstall-removes-tokens      1 test ! -e "$SECRETS"
+check host-secrets-unchanged        1 host_secrets_unchanged
 
 summary
