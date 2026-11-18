@@ -151,8 +151,9 @@ secrets_private() {
 
 phase "1. Install the core stacks and the MCP endpoint"
 make --no-print-directory install >"$WORK/install.log" 2>&1 || { tail -30 "$WORK/install.log"; die "make install failed"; }
-wait_ready
+# Straight after make install, as users do: Grafana may still be starting.
 make --no-print-directory install-mcp >"$WORK/install-mcp.log" 2>&1 || { tail -30 "$WORK/install-mcp.log"; die "make install-mcp failed"; }
+wait_ready
 GRAFANA_SA_TOKEN=$(token GRAFANA_SERVICE_ACCOUNT_TOKEN)
 RUN=$(hex 8); TRACE=$(hex 32)
 seed_loki "$RUN" || die "Loki push failed"

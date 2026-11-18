@@ -43,7 +43,14 @@ admin() { # admin METHOD PATH [JSON]
 json_num() { sed -n "s/.*\"$1\":\([0-9][0-9]*\).*/\1/p" | head -1; }
 json_str() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -1; }
 
-curl -fsS --max-time 5 -o /dev/null "$GRAFANA/api/health" || die "Grafana is not reachable at $GRAFANA (run make install-grafana first)"
+# Grafana may still be starting (make install && make install-mcp)
+i=0
+until curl -fsS --max-time 5 -o /dev/null "$GRAFANA/api/health" 2>/dev/null; do
+  i=$((i + 1))
+  [ "$i" -le 90 ] || die "Grafana is not reachable at $GRAFANA (run make install-grafana first)"
+  [ "$i" = 1 ] && echo "  … waiting for Grafana at $GRAFANA"
+  sleep 1
+done
 admin GET /api/user >/dev/null || die "Grafana rejected the admin credentials from .env"
 
 # Service account, Viewer only
