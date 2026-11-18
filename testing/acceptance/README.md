@@ -1,6 +1,6 @@
 # Acceptance Tests
 
-Two end-to-end tests that boot the real stacks and prove that user data survives the operations that put it at risk: backup/restore and upgrades.
+End-to-end tests that boot the real stacks. They prove that user data survives the operations that put it at risk (backup/restore, upgrades, the Tempo migration), and that restricted mode keeps its promises.
 
 > ⚠️ Both tests **delete every OIB volume** of the Docker daemon they run against. Run directly, they refuse to start when OIB containers or volumes already exist (`OIB_TEST_FORCE=1` overrides that and wipes the install). On a machine with an OIB install, use `ISOLATED=1`.
 
@@ -97,6 +97,24 @@ Installs the telemetry stack of a Tempo 2 release (`FROM`, default v1.0.0) and d
 3. **Interrupted after `/shutdown`:** Tempo 2 is up but its ingester is stopped, and a trace sent meanwhile waits in Alloy's queue. Rerunning `make migrate-tempo` completes, and every trace, including the queued one, opens by ID on Tempo 3.
 4. **`make rollback-tempo`:** Tempo 2 is back with its pre-migration traces and accepts new ones. Migrating again keeps those traces as well.
 
+## `restricted.sh` (`make test-restricted`)
+
+Checks restricted mode (`OIB_MODE=restricted`, see [restricted mode](../../docs/production-hardening.md#restricted-mode)):
+1. Installs every stack, including profiling, in restricted mode, and writes a run of known data.
+2. **Invariant**, checked with `docker inspect` on every running `oib-*` container, so new services are covered automatically:
+   - no Docker socket;
+   - no bind mount of `/`, `/run`, `/var/run` or `/var/lib/docker`;
+   - no added capability, privileged mode, devices, host PID or host network;
+   - `/proc` and `/sys` only read-only.
+
+   `oib-cadvisor` and `oib-alloy-logging` must not exist, and Prometheus must have no `cadvisor` target. Alloy (metrics) must not be able to read the environment or files of a root process in another container through the host's `/proc`.
+3. **It works:** datasources, dashboards, alert rules, every Prometheus target up, host metrics, pushed logs, traces, `make health` and `make backup`.
+4. **Switch to standard** with `make install`: cAdvisor and container-log collection come back, there are no stale containers, and the data written in restricted mode is still there. As controls, the invariant check must now report the Docker socket, `SYS_PTRACE` and the `/` mount, and the `/proc` probe must succeed against the root Alloy.
+5. **Switch back to restricted:** before `make install`, `make health` fails and names the leftover cAdvisor and Alloy (logging). After it, they are removed, the checks in steps 2 and 3 pass again, and the data is still there.
+6. **`make update`** keeps restricted mode: the invariant and the `/proc` check pass again, and the data is still there.
+
+Switching modes rewrites `.env`, so the test runs on a copy of the checkout and never edits yours; it checks at the end that your `.env` is unchanged.
+
 ## `mcp.sh` (`make test-mcp`)
 
 Installs the core stacks and the MCP endpoint (`make install-mcp`), writes a known log line and trace, and checks:
@@ -121,7 +139,7 @@ The test runs on a copy of the checkout, so a real install's `mcp/secrets/` is n
 
 ## CI
 
-[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, the Tempo recovery test, the MCP endpoint test, the isolation self-test, and the upgrade test from every release in its matrix. It runs:
+[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, the Tempo recovery test, the restricted-mode test, the MCP endpoint test, the isolation self-test, and the upgrade test from every release in its matrix. It runs:
 - on every pull request except those that change only documentation (`*.md`, `docs/`, `LICENSE`, `completions/`);
 - on pushes to `main`;
 - weekly, to catch registry-side changes such as moved or deleted image tags.

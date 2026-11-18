@@ -101,7 +101,7 @@ make validate  # Validate configuration files
    ```bash
    docker logs oib-alloy-logging
    ```
-   Alloy discovers every container on the host through `/var/run/docker.sock`; containers do not need to be on `oib-network`. With rootless Docker or Podman the socket lives elsewhere and must be mounted at `/var/run/docker.sock` in `logging/compose.yaml`.
+   Alloy discovers every container on the host through `/var/run/docker.sock`; containers do not need to be on `oib-network`. With rootless Docker or Podman the socket lives elsewhere and must be mounted at `/var/run/docker.sock` in `logging/compose.yaml`. In restricted mode (`OIB_MODE=restricted`) `oib-alloy-logging` is not run at all and container logs are not collected; push logs to Loki instead.
 
 2. **Test log ingestion end to end:**
    ```bash

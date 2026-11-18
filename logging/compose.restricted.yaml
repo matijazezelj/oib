@@ -1,0 +1,6 @@
+# Restricted mode (OIB_MODE=restricted in .env). The Makefile layers this file
+# over compose.yaml. Alloy (logging) is removed: it reads container logs through
+# the Docker socket. Loki keeps running; send logs to its push API
+# (http://localhost:3100/loki/api/v1/push) or through OTLP.
+services:
+  alloy-logging: !reset null

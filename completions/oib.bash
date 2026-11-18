@@ -26,7 +26,7 @@ _oib_completions() {
             start-services stop-services restart-services logs-services info-services \
             health doctor check-ports ps validate \
             demo demo-app demo-app-stop demo-traffic demo-examples \
-            test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-mcp test-isolation \
+            test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-mcp test-isolation test-restricted \
             open disk-usage version bootstrap \
             update update-grafana update-logging update-metrics update-telemetry update-profiling latest clean \
             backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \

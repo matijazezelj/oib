@@ -44,6 +44,9 @@ jobs:
             examples/ruby-rails/compose.yaml; do
             docker compose --env-file .env -f "$file" config >/dev/null
           done
+          for file in */compose.restricted.yaml; do
+            docker compose --env-file .env -f "${file%/*}/compose.yaml" -f "$file" config >/dev/null
+          done
 
       - name: Validate docs and dashboard assets
         run: |
