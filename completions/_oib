@@ -83,6 +83,8 @@ _oib_targets() {
         'test-tempo-recovery:Tempo migration failure/rollback test (deletes OIB data)'
         'test-restricted:Restricted-mode test (deletes OIB data)'
         'test-mcp:MCP endpoint test (deletes OIB data)'
+        'test-ask:make ask through hib against a staged Redis outage (local only)'
+        'ask:Ask an LLM about OIB data through hib'
         'test-isolation:Self-test of isolated acceptance runs'
 
         # Backup & Restore
