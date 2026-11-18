@@ -11,6 +11,7 @@ services:
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/rules:/etc/prometheus/rules:ro
+      - ./config/scrape:/etc/prometheus/scrape:ro
       - oib-prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

@@ -69,6 +69,24 @@ jobs:
             echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
           done
 
+  restricted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: restricted mode
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Restricted invariant, functionality and mode switches
+        run: make test-restricted
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^oib-'); do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1; echo "::endgroup::"
+          done
+
   isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 20

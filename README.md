@@ -545,6 +545,8 @@ No browser-facing or ingestion ports are publicly exposed by default. To accept 
 >
 > Anyone who can control these containers or run `docker` on the host has full access to it.
 
+**Restricted mode** removes the first two. Set `OIB_MODE=restricted` in `.env` and run `make install`. No OIB container then gets the Docker socket, the host's root filesystem, `/var/run`, `/var/lib/docker` or an added capability. You give up automatic container log collection (push logs to Loki instead), container metrics (cAdvisor) and disk space per mount. Logs your apps push, host metrics, traces and profiles keep working. `make test-restricted` proves all of this on every change; see [restricted mode](docs/production-hardening.md#restricted-mode) for details.
+
 The default single-host configuration is intended for development, homelabs, learning, and evaluation. Review the [production hardening guide](docs/production-hardening.md) before considering a production deployment.
 
 ## 📊 Data Retention

@@ -18,6 +18,11 @@ global:
 rule_files:
   - /etc/prometheus/rules/*.yml
 
+# Scrape jobs that need host access live in config/scrape/ (cAdvisor). In
+# restricted mode (OIB_MODE=restricted) an empty directory is mounted instead.
+scrape_config_files:
+  - /etc/prometheus/scrape/*.yml
+
 scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
@@ -29,11 +34,6 @@ scrape_configs:
   - job_name: 'alloy-metrics'
     static_configs:
       - targets: ['alloy-metrics:12345']
-
-  # cAdvisor - container metrics
-  - job_name: 'cadvisor'
-    static_configs:
-      - targets: ['cadvisor:8080']
 
   # ============================================
   # OPTIONAL: Pushgateway for batch jobs
