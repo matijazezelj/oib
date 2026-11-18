@@ -5,14 +5,18 @@
 #   2. inspect every running oib-* container: no Docker socket, no bind mount of
 #      the host's /, /run, /var/run or /var/lib/docker, no added capability, not
 #      privileged, no host PID/network namespace, no devices; /proc and /sys
-#      read-only. cAdvisor and Alloy (logging) must not exist.
+#      read-only. cAdvisor and Alloy (logging) must not exist. Alloy (metrics)
+#      cannot read another container's environment through the host's /proc.
 #   3. the stack works: datasources, dashboards, rules, every Prometheus target
-#      up, host metrics, pushed logs, traces, profiles, make health
+#      up, host metrics, pushed logs, traces, profiles, make health, make backup
 #   4. switch to standard mode with make install: cAdvisor and container-log
-#      collection come back, the invariant check flags them (control), the data
-#      written in restricted mode is kept
-#   5. switch back to restricted: the privileged containers are removed, the
-#      invariant holds again, the data is kept
+#      collection come back, the invariant and /proc checks flag them (controls),
+#      the data written in restricted mode is kept
+#   5. switch back to restricted: make health flags the leftover containers until
+#      make install removes them; the invariant holds again, also after make
+#      update, and the data is kept
+#
+# The test runs on a copy of the checkout, so it never edits your .env.
 #
 # Usage: testing/acceptance/restricted.sh     (or: make test-restricted [ISOLATED=1])
 
@@ -29,6 +33,15 @@ guard_clean_host
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/oib-restricted-test.XXXXXX")
 STATE="$WORK/state"
 
+# Work on a copy of the checkout: switching modes rewrites .env, and that must
+# never touch the real one, even if the run is interrupted or killed.
+env_sum() { if [ -f "$1" ]; then cksum <"$1"; else echo none; fi; }
+HOST_ENV="$ENV_FILE"; HOST_ENV_SUM=$(env_sum "$HOST_ENV")
+mkdir "$WORK/tree"
+tar -C "$ROOT" --exclude=./.git -cf - . | tar -C "$WORK/tree" -xf - || die "copying the checkout failed"
+ROOT="$WORK/tree"; ENV_FILE="$ROOT/.env"
+cd "$ROOT" || exit 1
+
 cleanup() {
   local rc=$?
   if [ "${KEEP:-0}" = 1 ]; then
@@ -37,15 +50,13 @@ cleanup() {
     phase "Cleanup"
     teardown_all
   fi
-  # put back the .env this test switched between modes
-  if [ -f "$WORK/env.orig" ]; then cp "$WORK/env.orig" "$ENV_FILE"; fi
   [ "${KEEP:-0}" = 1 ] || rm -rf "$WORK"
   cleanup_env
   exit $rc
 }
 trap cleanup EXIT
 ensure_env
-cp "$ENV_FILE" "$WORK/env.orig"
+cp "$ENV_FILE" "$WORK/env.orig"   # the copy's .env; set_mode rewrites it
 
 set_mode() { # set_mode standard|restricted: write OIB_MODE into .env
   grep -v '^OIB_MODE=' "$WORK/env.orig" >"$ENV_FILE"
@@ -82,6 +93,33 @@ restricted_invariant() {
 absent() { [ -z "$(docker ps -aq --filter "name=^$1$")" ]; }
 running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 health_ok() { make --no-print-directory health >"$WORK/health.log" 2>&1; }
+backup_ok() { # make backup succeeds and writes an archive per component
+  local c stamp; stamp="restricted_$(date +%s)"
+  make --no-print-directory backup BACKUP_DIR="$WORK/backups" TIMESTAMP="$stamp" >"$WORK/backup.log" 2>&1 || return 1
+  for c in prometheus loki tempo grafana pyroscope; do
+    [ -s "$WORK/backups/${c}_${stamp}.tar.gz" ] || return 1
+  done
+}
+# Start a root process with a secret in its environment in another container.
+start_proc_probe() {
+  PROBE_SECRET=$(hex 8)
+  docker rm -f oib-test-proc-probe >/dev/null 2>&1 || true
+  docker run -d --name oib-test-proc-probe -e "OIB_PROBE_SECRET=$PROBE_SECRET" --entrypoint sleep \
+    "$(docker inspect -f '{{.Config.Image}}' oib-alloy-metrics)" 3600 >/dev/null || die "starting the /proc probe failed"
+  PROBE_PID=$(docker inspect -f '{{.State.Pid}}' oib-test-proc-probe)
+}
+# Alloy (metrics) can read the probe's environment through the host's /proc
+alloy_reads_probe_env() {
+  docker exec oib-alloy-metrics cat "/host/proc/$PROBE_PID/environ" 2>/dev/null | tr '\0' '\n' | grep -qx "OIB_PROBE_SECRET=$PROBE_SECRET"
+}
+alloy_cannot_read_probe_env() {
+  running oib-alloy-metrics && ! alloy_reads_probe_env \
+    && ! docker exec oib-alloy-metrics ls "/host/proc/$PROBE_PID/root/" >/dev/null 2>&1
+}
+health_flags() { # health_flags CONTAINER-LABEL: make health fails and names the leftover
+  ! health_ok && grep -q "$1 still exists in restricted mode" "$WORK/health.log"
+}
+host_env_unchanged() { [ "$(env_sum "$HOST_ENV")" = "$HOST_ENV_SUM" ]; }
 prom_has_job() { # prom_has_job JOB: Prometheus has an active target for JOB
   curl -fsS "$PROM/api/v1/targets?state=active" | jq -e --arg j "$1" 'any(.data.activeTargets[]; .labels.job == $j)' >/dev/null
 }
@@ -93,6 +131,8 @@ restricted_checks() { # restricted_checks LABEL
   check "$1-no-cadvisor"           30 absent oib-cadvisor
   check "$1-no-alloy-logging"      30 absent oib-alloy-logging
   check "$1-no-cadvisor-job"       "$t" not prom_has_job cadvisor
+  start_proc_probe
+  check "$1-proc-env-isolated"     30 alloy_cannot_read_probe_env
   check "$1-datasources-healthy"  "$t" datasources_healthy with-profiling
   check "$1-dashboards"           "$t" dashboards_provisioned
   check "$1-prometheus-rules"     "$t" prom_rules_loaded
@@ -115,6 +155,7 @@ log "running: $(docker ps --format '{{.Names}}' --filter name=^oib- | sort | tr 
 phase "2-3. Restricted invariant and functionality"
 seed_run "$STATE" with-profiling
 restricted_checks restricted
+check restricted-make-backup 1 backup_ok
 
 phase "4. Switch to standard mode"
 set_mode standard
@@ -134,12 +175,29 @@ detects_standard_privileges() {
     && grep -q 'oib-alloy-metrics: host path / -> /rootfs' "$WORK/violations.txt"
 }
 check standard-invariant-check-detects-privileges 30 detects_standard_privileges
+# Control: the /proc probe works (standard mode's Alloy runs as root).
+start_proc_probe
+check standard-proc-probe-detects-root-alloy 30 alloy_reads_probe_env
 verify_persisted "$STATE"
 
 phase "5. Switch back to restricted mode"
 set_mode restricted
+check health-flags-leftover-cadvisor      1 health_flags cAdvisor
+check health-flags-leftover-alloy-logging 1 health_flags 'Alloy (logging)'
 install_all install-restricted-again
 restricted_checks back-to-restricted
 verify_persisted "$STATE"
+
+phase "6. make update keeps restricted mode"
+make --no-print-directory update >"$WORK/update.log" 2>&1 || { tail -30 "$WORK/update.log"; die "make update failed"; }
+wait_ready with-profiling
+check after-update-invariant 30 restricted_invariant
+[ -s "$WORK/violations.txt" ] && sed 's/^/      /' "$WORK/violations.txt"
+check after-update-no-cadvisor      30 absent oib-cadvisor
+check after-update-no-alloy-logging 30 absent oib-alloy-logging
+start_proc_probe
+check after-update-proc-env-isolated 30 alloy_cannot_read_probe_env
+verify_persisted "$STATE"
+check host-env-unchanged 1 host_env_unchanged
 
 summary

@@ -541,11 +541,12 @@ No browser-facing or ingestion ports are publicly exposed by default. To accept 
 > [!WARNING]
 > - `/var/run/docker.sock` is mounted into `oib-alloy-logging` and `oib-cadvisor`. Docker API access is root-equivalent on the host, and `:ro` on the mount does not restrict API calls.
 > - The host root filesystem is mounted read-only (`/:/rootfs:ro`) into `oib-alloy-metrics` and `oib-cadvisor`, so they can read any file on the host.
+> - `oib-alloy-metrics` runs as root with the host's `/proc`, so it can also read the environment variables of root processes in other containers.
 > - Grafana, Loki, Prometheus, Tempo and Pyroscope load the whole root `.env` (`env_file: ../.env`), so `GRAFANA_ADMIN_PASSWORD` and `POSTGRES_PASSWORD` are visible in all of them via `docker inspect`.
 >
 > Anyone who can control these containers or run `docker` on the host has full access to it.
 
-**Restricted mode** removes the first two. Set `OIB_MODE=restricted` in `.env` and run `make install`. No OIB container then gets the Docker socket, the host's root filesystem, `/var/run`, `/var/lib/docker` or an added capability. You give up automatic container log collection (push logs to Loki instead), container metrics (cAdvisor) and disk space per mount. Logs your apps push, host metrics, traces and profiles keep working. `make test-restricted` proves all of this on every change; see [restricted mode](docs/production-hardening.md#restricted-mode) for details.
+**Restricted mode** removes the first three. Set `OIB_MODE=restricted` in `.env` and run `make install`. No OIB container then gets the Docker socket, the host's root filesystem, `/var/run`, `/var/lib/docker` or an added capability. Alloy (metrics) also runs as a non-root user with no capabilities. You give up automatic container log collection (push logs to Loki instead), container metrics (cAdvisor) and disk space per mount. Logs your apps push, host metrics, traces and profiles keep working. `make test-restricted` proves all of this on every change; see [restricted mode](docs/production-hardening.md#restricted-mode) for details.
 
 The default single-host configuration is intended for development, homelabs, learning, and evaluation. Review the [production hardening guide](docs/production-hardening.md) before considering a production deployment.
 

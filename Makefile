@@ -770,13 +770,19 @@ health: ## Quick health check of all services
 	echo ""; \
 	echo "$(CYAN)Logging:$(RESET)"; \
 	check_http "Loki" "oib-loki" "$(LOKI_URL)/ready"; \
-	if [ -n "$(RESTRICTED)" ]; then echo "  $(YELLOW)-$(RESET) Alloy (logging) is not used in restricted mode"; \
+	if [ -n "$(RESTRICTED)" ] && docker inspect oib-alloy-logging >/dev/null 2>&1; then \
+		echo "  $(RED)✗$(RESET) Alloy (logging) still exists in restricted mode; run make install to remove it"; \
+		errors=$$((errors + 1)); \
+	elif [ -n "$(RESTRICTED)" ]; then echo "  $(YELLOW)-$(RESET) Alloy (logging) is not used in restricted mode"; \
 	else check_http "Alloy (logging)" "oib-alloy-logging" "$(ALLOY_LOGGING_URL)/-/ready"; fi; \
 	echo ""; \
 	echo "$(CYAN)Metrics:$(RESET)"; \
 	check_http "Prometheus" "oib-prometheus" "$(PROMETHEUS_URL)/-/ready"; \
 	check_http "Alloy (metrics)" "oib-alloy-metrics" "$(ALLOY_METRICS_URL)/-/ready"; \
-	if [ -n "$(RESTRICTED)" ]; then echo "  $(YELLOW)-$(RESET) cAdvisor is not used in restricted mode"; \
+	if [ -n "$(RESTRICTED)" ] && docker inspect oib-cadvisor >/dev/null 2>&1; then \
+		echo "  $(RED)✗$(RESET) cAdvisor still exists in restricted mode; run make install to remove it"; \
+		errors=$$((errors + 1)); \
+	elif [ -n "$(RESTRICTED)" ]; then echo "  $(YELLOW)-$(RESET) cAdvisor is not used in restricted mode"; \
 	else check_http "cAdvisor" "oib-cadvisor" "$(CADVISOR_URL)/healthz"; fi; \
 	check_http "Blackbox Exporter" "oib-blackbox-exporter" "$(BLACKBOX_URL)/health"; \
 	echo ""; \

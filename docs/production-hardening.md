@@ -173,7 +173,7 @@ Several collectors need privileged views of the host. Treat these containers as 
 | `oib-alloy-logging` | `/var/run/docker.sock:ro` | Discover containers and read their logs | Docker API access is root-equivalent; `:ro` does not limit API calls |
 | `oib-alloy-logging` | `/var/log:/var/log:ro` | Only used by the commented system-logs block in `logging/config/alloy-config.alloy` | Read access to host logs |
 | `oib-cadvisor` | `/var/run/docker.sock:ro`, `/:/rootfs:ro`, `/sys`, `/var/lib/docker`, `/dev/disk` | Container metrics | Root-equivalent (socket) and read access to the whole host filesystem |
-| `oib-alloy-metrics` | `/:/rootfs:ro`, `/proc`, `/sys` | Host filesystem metrics | Read access to the whole host filesystem |
+| `oib-alloy-metrics` | `/:/rootfs:ro`, `/proc`, `/sys` | Host filesystem metrics | Read access to the whole host filesystem; running as root with the host's `/proc`, it can also read the environment variables and files of root processes in other containers |
 
 To reduce exposure, run OIB in [restricted mode](#restricted-mode), put a Docker socket proxy that only allows read-only container endpoints in front of the socket, or disable the stacks you do not need.
 
@@ -187,7 +187,7 @@ In restricted mode no OIB container has:
 - a bind mount of the host's `/`, `/run`, `/var/run` or `/var/lib/docker`;
 - an added capability, privileged mode, devices, or the host's PID or network namespace.
 
-`oib-alloy-metrics` keeps read-only `/proc` and `/sys`, for host CPU, memory, disk I/O and network metrics. They expose process names and command lines on the host, not file contents or the Docker API.
+`oib-alloy-metrics` keeps read-only `/proc` and `/sys`, for host CPU, memory, disk I/O and network metrics. They show every process's name and command line on the host. In restricted mode Alloy runs as its own non-root user with all capabilities dropped. That way it cannot read other processes' environments or files through `/proc` (as root it could, for root processes in other containers).
 
 What restricted mode gives up:
 
@@ -197,7 +197,14 @@ What restricted mode gives up:
 | Container metrics (`oib-cadvisor` is not run; the `container_*` alerts and dashboard panels stay empty) | cAdvisor needs the socket, `/`, `/var/lib/docker` and `SYS_PTRACE` | Instrument your apps, or scrape exporters you run yourself (add jobs to `metrics/config/scrape.restricted/`) |
 | Disk space per mount (`node_filesystem_*`; disk-space alerts never fire) | It needs the host's root filesystem | Monitor disk space on the host directly |
 
-Logs pushed to Loki, host metrics, traces, profiles, dashboards, alert rules, backups and restores all work. `make test-restricted` checks the invariant above with `docker inspect` on every OIB container, checks that the stack works, and switches modes in both directions on a stack with data. CI runs it on every change.
+Logs pushed to Loki, host metrics, traces, profiles, dashboards, alert rules and `make backup` all work. `make test-restricted` does the following, and CI runs it on every change:
+
+- checks the invariant above with `docker inspect` on every OIB container;
+- checks that Alloy cannot read another container's environment;
+- checks that the stack works, including after `make update`;
+- switches modes in both directions on a stack with data.
+
+`make health` fails if cAdvisor or Alloy (logging) is still running after you switch to restricted mode without `make install`.
 
 Restricted mode is not rootless Docker: the daemon still runs as root. Running OIB under rootless Docker or Podman is not tested yet.
 
