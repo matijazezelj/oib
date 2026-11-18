@@ -10,8 +10,10 @@
 #   3. the stack works: datasources, dashboards, rules, every Prometheus target
 #      up, host metrics, pushed logs, traces, profiles, make health, make backup
 #   4. switch to standard mode with make install: cAdvisor and container-log
-#      collection come back, the invariant and /proc checks flag them (controls),
-#      the data written in restricted mode is kept
+#      collection come back, the invariant check flags them (control), Alloy
+#      (metrics) still can't read other containers' environments (it runs
+#      non-root in both modes) and reports disk space per filesystem, and the
+#      data written in restricted mode is kept
 #   5. switch back to restricted: make health flags the leftover containers until
 #      make install removes them; the invariant holds again, also after make
 #      update, and the data is kept
@@ -112,6 +114,15 @@ start_proc_probe() {
 alloy_reads_probe_env() {
   docker exec oib-alloy-metrics cat "/host/proc/$PROBE_PID/environ" 2>/dev/null | tr '\0' '\n' | grep -qx "OIB_PROBE_SECRET=$PROBE_SECRET"
 }
+root_reader_reads_probe_env() {
+  docker run --rm -v /proc:/host/proc:ro --entrypoint cat "$(docker inspect -f '{{.Config.Image}}' oib-alloy-metrics)" \
+    "/host/proc/$PROBE_PID/environ" 2>/dev/null | tr '\0' '\n' | grep -qx "OIB_PROBE_SECRET=$PROBE_SECRET"
+}
+# Standard mode keeps disk space per filesystem, read as the non-root alloy user
+host_filesystem_metrics() {
+  curl -fsS -G "$PROM/api/v1/query" --data-urlencode 'query=count(node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})' \
+    | jq -e '(.data.result[0].value[1] // "0" | tonumber) > 0' >/dev/null
+}
 alloy_cannot_read_probe_env() {
   running oib-alloy-metrics && ! alloy_reads_probe_env \
     && ! docker exec oib-alloy-metrics ls "/host/proc/$PROBE_PID/root/" >/dev/null 2>&1
@@ -176,9 +187,12 @@ detects_standard_privileges() {
 }
 check standard-invariant-check-detects-privileges 30 detects_standard_privileges
 [ "$FAILED" -gt 0 ] && [ -s "$WORK/violations.txt" ] && sed 's/^/      reported: /' "$WORK/violations.txt"
-# Control: the /proc probe works (standard mode's Alloy runs as root).
+# Alloy runs non-root in standard mode too, so the probe stays unreadable; the
+# control shows the probe works by reading it as root with the same mount.
 start_proc_probe
-check standard-proc-probe-detects-root-alloy 30 alloy_reads_probe_env
+check standard-proc-env-isolated              30 alloy_cannot_read_probe_env
+check standard-proc-probe-detects-root-reader 30 root_reader_reads_probe_env
+check standard-host-filesystem-metrics       120 host_filesystem_metrics
 verify_persisted "$STATE"
 
 phase "5. Switch back to restricted mode"

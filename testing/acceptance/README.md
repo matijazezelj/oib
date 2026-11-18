@@ -110,7 +110,7 @@ Checks restricted mode (`OIB_MODE=restricted`, see [restricted mode](../../docs/
 
    `oib-cadvisor` and `oib-alloy-logging` must not exist, and Prometheus must have no `cadvisor` target. Alloy (metrics) must not be able to read the environment or files of a root process in another container through the host's `/proc`.
 3. **It works:** datasources, dashboards, alert rules, every Prometheus target up, host metrics, pushed logs, traces, `make health` and `make backup`.
-4. **Switch to standard** with `make install`: cAdvisor and container-log collection come back, there are no stale containers, and the data written in restricted mode is still there. As controls, the invariant check must now report the Docker socket, `SYS_PTRACE` and the `/` mount, and the `/proc` probe must succeed against the root Alloy.
+4. **Switch to standard** with `make install`: cAdvisor and container-log collection come back, there are no stale containers, and the data written in restricted mode is still there. As a control, the invariant check must now report the Docker socket, `SYS_PTRACE` and the `/` mount. Alloy (metrics) runs non-root in both modes, so the `/proc` probe must still fail against it, while a root container with the same mount must succeed (control). Disk space per filesystem must still be reported.
 5. **Switch back to restricted:** before `make install`, `make health` fails and names the leftover cAdvisor and Alloy (logging). After it, they are removed, the checks in steps 2 and 3 pass again, and the data is still there.
 6. **`make update`** keeps restricted mode: the invariant and the `/proc` check pass again, and the data is still there.
 

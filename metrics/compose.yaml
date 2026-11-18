@@ -73,6 +73,12 @@ services:
       start_period: 15s
     restart: unless-stopped
     stop_grace_period: 15s
+    # Its own non-root user with no capabilities. As root, the host's /proc would
+    # let it read the environment and files of other containers' root processes.
+    # Disk space is still read for every filesystem a non-root user can reach.
+    user: "473:473"   # the image's alloy user; owns /var/lib/alloy
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     deploy:
