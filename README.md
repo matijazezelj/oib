@@ -688,10 +688,12 @@ make restore-loki FILE=./backups/loki_YYYYMMDD_HHMMSS.tar.gz
   - Restoring relies on each component's crash recovery: write-ahead-log replay, or SQLite journal recovery for Grafana.
   - Derived files can be caught mid-write too. CI has seen Pyroscope's bucket index (a cached listing of its blocks) come back corrupt from a frozen copy. Pyroscope logged `corrupted bucket index found, falling back to fetching directly from bucket` and rebuilt the index; every profile was restored.
   - Prometheus would need its snapshot API (`--web.enable-admin-api`) for an application-consistent copy. Tempo 3 has no flush API at all.
-- **Observed under test, not guaranteed:** `make test-backup` restores archives taken while logs and traces are being written. It has always found:
-  - every log line Loki acknowledged before its freeze;
+- **Observed under test, not guaranteed:** `make test-backup` restores archives taken while logs and traces are being written. It finds:
   - every trace sent more than 10 s before Tempo's freeze;
-  - no corruption or repair messages from any component.
+  - no corruption or repair messages from any component;
+  - nearly always, every log line Loki acknowledged before its freeze.
+
+  **Known issue:** in CI, about one run in five loses Loki's last fraction of a second of acknowledged writes. Twice so far, two lines acknowledged 0.1 to 0.4 s before the backup started were missing after the restore. The cause is under investigation. A standalone Loki that is frozen, archived and restored doesn't lose anything (0 in 20 cycles), so it is specific to the full stack or the backup and restore path.
 
   These are results under the tested load and versions (CI runs them on every change and weekly), not a promise for every workload. Traces from the last seconds before a freeze can be lost, as in a crash: they may still be in Alloy's batch or in Tempo's newest, unfinished block.
 - If you need application-consistent backups, stop the stack for the backup (`make stop && make backup && make start`) and accept the gap in collection.
