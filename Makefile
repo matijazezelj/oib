@@ -5,6 +5,7 @@
         uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
         status info info-grafana info-logging info-metrics info-telemetry info-profiling info-services \
         logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
+        install-mcp uninstall-mcp logs-mcp mcp-config test-mcp \
         network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling latest \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-isolation \
@@ -42,6 +43,7 @@ OTEL_GRPC_PORT := $(or $(call env_port,OTEL_GRPC_PORT),4317)
 OTEL_HTTP_PORT := $(or $(call env_port,OTEL_HTTP_PORT),4318)
 ALLOY_TELEMETRY_PORT := $(or $(call env_port,ALLOY_TELEMETRY_PORT),12346)
 PYROSCOPE_PORT := $(or $(call env_port,PYROSCOPE_PORT),4040)
+MCP_PORT := $(or $(call env_port,MCP_PORT),3030)
 
 GRAFANA_CONNECT_HOST := $(if $(filter 0.0.0.0,$(BIND_ADDR)),127.0.0.1,$(BIND_ADDR))
 OTEL_CONNECT_HOST := $(if $(filter 0.0.0.0,$(OTEL_BIND_ADDR)),127.0.0.1,$(OTEL_BIND_ADDR))
@@ -56,6 +58,7 @@ TEMPO_URL := http://127.0.0.1:$(TEMPO_HTTP_PORT)
 ALLOY_TELEMETRY_URL := http://127.0.0.1:$(ALLOY_TELEMETRY_PORT)
 OTEL_HTTP_URL := http://$(OTEL_CONNECT_HOST):$(OTEL_HTTP_PORT)
 PYROSCOPE_URL := http://127.0.0.1:$(PYROSCOPE_PORT)
+MCP_URL := http://127.0.0.1:$(MCP_PORT)
 
 CORE_PORTS := $(GRAFANA_PORT) $(LOKI_PORT) $(ALLOY_LOGGING_PORT) $(PROMETHEUS_PORT) \
               $(ALLOY_METRICS_PORT) $(CADVISOR_PORT) $(BLACKBOX_PORT) \
@@ -83,7 +86,7 @@ help: ## Show this help message
 	@echo "  make $(GREEN)<target>$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Installation:$(RESET)"
-	@grep -E '^(install|install-grafana|install-logging|install-metrics|install-telemetry|install-profiling):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(install|install-grafana|install-logging|install-metrics|install-telemetry|install-profiling|install-mcp|mcp-config):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Management:$(RESET)"
 	@grep -E '^(start|stop|restart|status|info|logs)[^-]*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -95,7 +98,7 @@ help: ## Show this help message
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Acceptance Tests (delete all OIB data):$(RESET)"
-	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-mcp|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -367,6 +370,48 @@ install-profiling: network ## Install profiling stack (Pyroscope) - optional
 	@echo ""
 	@echo "$(YELLOW)Note: Restart Grafana to enable Pyroscope datasource: make restart-grafana$(RESET)"
 
+install-mcp: network ## Install the read-only MCP endpoint for AI agents (hib, Claude Code, Codex) - optional
+	@echo "$(CYAN)🤖 Installing the MCP endpoint...$(RESET)"
+	@mcp/provision.sh "$(GRAFANA_URL)"
+	@cd mcp && $(DOCKER_COMPOSE) up -d --remove-orphans
+	@i=0; until curl -fsS -o /dev/null --max-time 2 "$(MCP_URL)/healthz" 2>/dev/null; do \
+		i=$$((i + 1)); \
+		if [ $$i -gt 30 ]; then \
+			echo "$(RED)✗ The MCP endpoint is not healthy at $(MCP_URL)/healthz$(RESET)"; \
+			docker logs --tail 20 oib-mcp-grafana 2>&1 | sed 's/^/    /'; exit 1; \
+		fi; sleep 1; \
+	done
+	@echo "$(GREEN)✓ Read-only MCP endpoint at $(MCP_URL)/mcp$(RESET)"
+	@$(MAKE) --no-print-directory mcp-config
+
+mcp-config: ## Show how to connect hib, Claude Code or Codex to the MCP endpoint
+	@echo ""
+	@echo "$(BOLD)$(CYAN)🤖 MCP endpoint (read-only)$(RESET)"
+	@echo "$(BOLD)────────────────────────────────────────$(RESET)"
+	@echo "  URL:    $(YELLOW)$(MCP_URL)/mcp$(RESET)  (streamable HTTP, bearer token required)"
+	@echo "  Token:  $(YELLOW)$(CURDIR)/mcp/secrets/mcp.env$(RESET) (MCP_GRAFANA_SERVER_TOKEN)"
+	@echo ""
+	@echo "$(GREEN)Claude Code (and hib's Claude sessions):$(RESET)"
+	@echo "  claude mcp add --scope user --transport http oib $(MCP_URL)/mcp \\"
+	@echo "    --header \"Authorization: Bearer \$$(sed -n 's/^MCP_GRAFANA_SERVER_TOKEN=//p' $(CURDIR)/mcp/secrets/mcp.env)\""
+	@echo ""
+	@echo "$(GREEN)Codex (and hib's Codex sessions), in ~/.codex/config.toml:$(RESET)"
+	@echo "  [mcp_servers.oib]"
+	@echo "  url = \"$(MCP_URL)/mcp\""
+	@echo "  bearer_token_env_var = \"OIB_MCP_TOKEN\""
+	@echo "  (export OIB_MCP_TOKEN with the token above in the shell that starts codex or hib)"
+	@echo ""
+
+uninstall-mcp: ## Remove the MCP endpoint and its tokens
+	@echo "$(YELLOW)Removing the MCP endpoint...$(RESET)"
+	@if [ -f mcp/secrets/mcp.env ]; then cd mcp && $(DOCKER_COMPOSE) down --remove-orphans --timeout 2; \
+	else docker rm -f oib-mcp-grafana >/dev/null 2>&1 || true; fi
+	@rm -f mcp/secrets/mcp.env
+	@echo "$(GREEN)✓ MCP endpoint removed$(RESET) (the Grafana service account oib-mcp is kept; its token is gone)"
+
+logs-mcp: ## Tail MCP endpoint logs
+	@docker logs -f oib-mcp-grafana
+
 install-services: network ## Install shared services (PostgreSQL + Redis) - optional
 	@echo "$(CYAN)🗄️  Installing Shared Services...$(RESET)"
 	@cd services && $(DOCKER_COMPOSE) up -d --remove-orphans
@@ -573,6 +618,10 @@ status: ## Show status of all stacks with health indicators
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "PostgreSQL" "stopped"; \
 	fi
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-mcp-grafana; then \
+		health=$$(curl -sf $(MCP_URL)/healthz >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
+		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "MCP (read-only)" "running" "$$health"; \
+	fi
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-redis; then \
 		health=$$(docker exec oib-redis redis-cli ping >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Redis" "running" "$$health"; \
@@ -770,6 +819,13 @@ health: ## Quick health check of all services
 		echo "  $(YELLOW)-$(RESET) Pyroscope is not installed"; \
 	fi; \
 	echo ""; \
+	echo "$(CYAN)MCP endpoint (optional):$(RESET)"; \
+	if docker inspect oib-mcp-grafana >/dev/null 2>&1; then \
+		check_http "MCP (read-only)" "oib-mcp-grafana" "$(MCP_URL)/healthz"; \
+	else \
+		echo "  $(YELLOW)-$(RESET) MCP endpoint is not installed"; \
+	fi; \
+	echo ""; \
 	if [ $$errors -gt 0 ]; then \
 		echo "$(RED)$(BOLD)✗ Health check failed with $$errors unhealthy core service(s)$(RESET)"; \
 		exit 1; \
@@ -851,6 +907,7 @@ validate: ## Validate configuration files
 		metrics/compose.yaml \
 		telemetry/compose.yaml \
 		profiling/compose.yaml \
+		mcp/compose.yaml \
 		services/compose.yaml \
 		testing/compose.yaml \
 		examples/demo-app/compose.yaml \
@@ -1288,6 +1345,9 @@ test-upgrade: ## Upgrade from FROM=<tag> and verify data (ISOLATED=1: in Docker-
 
 test-tempo-recovery: ## Tempo 2->3 migration failures, rerun and rollback (FROM=v1.0.0; ISOLATED=1)
 	@$(ACCEPTANCE_RUN) tempo-migration-recovery.sh $(FROM)
+
+test-mcp: ## MCP endpoint: read-only, authenticated, answers from OIB data (ISOLATED=1: in Docker-in-Docker)
+	@$(ACCEPTANCE_RUN) mcp.sh
 
 test-isolation: ## Self-test of ISOLATED=1: concurrent, interrupted and killed runs clean up
 	@testing/acceptance/isolation-selftest.sh

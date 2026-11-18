@@ -14,6 +14,9 @@ _oib_targets() {
         'install-metrics:Install metrics stack (Prometheus + exporters)'
         'install-telemetry:Install telemetry stack (Tempo + Alloy)'
         'install-profiling:Install profiling stack (Pyroscope)'
+        'install-mcp:Install the read-only MCP endpoint for AI agents'
+        'mcp-config:Show how to connect hib, Claude Code or Codex to the MCP endpoint'
+        'logs-mcp:Tail MCP endpoint logs'
         'install-services:Install shared services (PostgreSQL + Redis)'
         'preflight:Check prerequisites and port conflicts'
         'network:Create shared Docker network'
@@ -78,6 +81,7 @@ _oib_targets() {
         'test-backup:Backup/restore round trip test (deletes OIB data)'
         'test-upgrade:Upgrade test from FROM=<tag> (deletes OIB data)'
         'test-tempo-recovery:Tempo migration failure/rollback test (deletes OIB data)'
+        'test-mcp:MCP endpoint test (deletes OIB data)'
         'test-isolation:Self-test of isolated acceptance runs'
 
         # Backup & Restore
@@ -121,6 +125,7 @@ _oib_targets() {
         'uninstall-metrics:Remove metrics stack'
         'uninstall-telemetry:Remove telemetry stack'
         'uninstall-profiling:Remove profiling stack'
+        'uninstall-mcp:Remove the MCP endpoint and its tokens'
         'uninstall-services:Remove shared services and volumes'
 
         # Help

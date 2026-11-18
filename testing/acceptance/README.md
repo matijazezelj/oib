@@ -97,13 +97,26 @@ Installs the telemetry stack of a Tempo 2 release (`FROM`, default v1.0.0) and d
 3. **Interrupted after `/shutdown`:** Tempo 2 is up but its ingester is stopped, and a trace sent meanwhile waits in Alloy's queue. Rerunning `make migrate-tempo` completes, and every trace, including the queued one, opens by ID on Tempo 3.
 4. **`make rollback-tempo`:** Tempo 2 is back with its pre-migration traces and accepts new ones. Migrating again keeps those traces as well.
 
+## `mcp.sh` (`make test-mcp`)
+
+Installs the core stacks and the MCP endpoint (`make install-mcp`), writes a known log line and trace, and checks:
+1. **Access control:**
+   - no token or a wrong token: `401`;
+   - a foreign `Host` header or a browser `Origin`: `403`;
+   - the token file is `0600` in a `0700` directory.
+2. **Read-only:**
+   - the read tools are there, and no tool whose name says it writes (`create_`, `update_`, `delete_`…) is registered;
+   - the `oib-mcp` service account has the Viewer role, can read, and gets `403` when it tries to save a dashboard or create a service account.
+3. **It answers from OIB's data:** through MCP tool calls, the seeded log line comes back from Loki, `up{job="prometheus"}` from Prometheus, and the seeded trace from Tempo, both by ID and by TraceQL search.
+4. **Reinstall and uninstall:** a second `make install-mcp` keeps the client token and still answers, and `make uninstall-mcp` removes the container and the tokens.
+
 ## Debugging
 
 `KEEP=1 make test-backup` (or `test-upgrade`) leaves the stack running and keeps the temporary directory (backups, logs, `state` with the run ID and trace ID). Clean up afterwards with `make uninstall-profiling; make uninstall YES=1`.
 
 ## CI
 
-[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, plus the upgrade test from every release in its matrix. It runs:
+[`.github/workflows/acceptance.yml`](../../.github/workflows/acceptance.yml) runs the backup round trip, the Tempo recovery test, the MCP endpoint test, the isolation self-test, and the upgrade test from every release in its matrix. It runs:
 - on every pull request except those that change only documentation (`*.md`, `docs/`, `LICENSE`, `completions/`);
 - on pushes to `main`;
 - weekly, to catch registry-side changes such as moved or deleted image tags.

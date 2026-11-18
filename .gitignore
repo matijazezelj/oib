@@ -25,6 +25,9 @@ temp/
 # Backups
 backups/
 
+# MCP endpoint tokens (make install-mcp)
+mcp/secrets/
+
 # Python bytecode
 __pycache__/
 *.pyc
