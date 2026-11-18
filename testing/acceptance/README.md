@@ -133,6 +133,22 @@ Installs the core stacks and the MCP endpoint (`make install-mcp`), writes a kno
 
 The test runs on a copy of the checkout, so a real install's `mcp/secrets/` is never touched; it checks that at the end.
 
+## `ask-hib.sh` (`make test-ask`)
+
+Checks `make ask` end to end through [hib](https://github.com/matijazezelj/hib).
+- **Local only:** it needs hib and a logged-in Claude, so it doesn't run in CI.
+- **Runs against your install:** it uses the OIB installed on this machine, with `make install-mcp` and the demo app, which it starts if needed.
+- **Nothing is deleted:** the only change is a staged outage. `oib-redis` is stopped for a few minutes and always started again.
+- **Your hib is untouched:** the test runs its own hib daemon, with a copy of your config on a free port (from 4143) plus the block from `make mcp-config`.
+
+What it checks:
+1. **Control:** after a quiet period with Redis up (`QUIET`, default 330 s), a leading question ("what is wrong with the demo app?") must not be answered with a Redis root cause.
+2. **Incident:** with Redis stopped (`OUTAGE`, default 150 s), "why did checkout latency increase?" must name `oib-redis` and a UTC time within the outage window.
+3. **Guarded calls only:** in both runs, the agent queried OIB through hib's guarded tools, meaning `tool.permission` events with `mcp_server=oib` decided by policy. No call went to an unguarded `mcp__oib__` server.
+4. **What reached the model:** the Claude transcript of the run contains none of the raw values the guard should replace: the `oib-network` gateway, the container IPs, and the seed users' emails.
+
+The answers come from a model, so checks 1 and 2 use patterns, and a run can fail on unusual wording. `KEEP=1` keeps the answers, the events and the paths to the transcripts for reading. Set `HIB` to the command that runs hib if it isn't on your PATH (`HIB="bun ~/hib/src/cli.ts"`), and `MODEL` to choose the model (default `claude@default/sonnet`).
+
 ## Debugging
 
 `KEEP=1 make test-backup` (or `test-upgrade`) leaves the stack running and keeps the temporary directory (backups, logs, `state` with the run ID and trace ID). Clean up afterwards with `make uninstall-profiling; make uninstall YES=1`.

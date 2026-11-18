@@ -384,6 +384,8 @@ oib/
 ├── mcp/
 │   ├── compose.yaml            # Read-only MCP endpoint for AI agents (optional)
 │   └── provision.sh            # Viewer service account and tokens (make install-mcp)
+├── scripts/
+│   └── ask.sh                  # make ask: one question to hib's agent over OIB's data
 ├── services/
 │   ├── compose.yaml            # PostgreSQL + Redis (optional)
 │   └── init/                   # Database schema and seed data (also used by the demo app)
@@ -560,6 +562,23 @@ hib's agent sessions run Claude Code or Codex with your user-level MCP servers. 
 - **Approvals:** hib asks before each MCP call, because "Always" for an MCP tool covers only that exact call.
 - **What leaves the machine:** what the tools return goes to the model provider like any other tool output, so treat logs with personal data accordingly.
 - **Sensitive folders:** hib's sensitive folders deliberately load no MCP servers but hib's own.
+
+**Asking from the command line.** `make ask` puts one question to hib's agent and prints its answer:
+
+```bash
+make ask Q="Why did checkout latency increase?" SINCE=1h
+make ask                                    # "is anything wrong?" over the last hour
+make ask Q="..." MODEL=claude@default/sonnet
+```
+
+- **What it runs:** one `hib ask --workspace` turn with the question and the time window.
+- **Where it runs:** in an empty folder, never this checkout, which holds `mcp/secrets`.
+- **Tools:**
+  - The agent can use only the guarded OIB tools.
+  - Anything that would need your approval, such as file edits, commands or other network hosts, is denied, and the command exits with status 3.
+- **Requirements:** a hib with `hib ask --workspace` (hib PR #29), the `[mcp.oib]` block in its config, and `make install-mcp`.
+
+`make test-ask` checks it end to end on this machine; it needs hib and a logged-in Claude, so it doesn't run in CI. See [testing/acceptance/README.md](testing/acceptance/README.md#ask-hibsh-make-test-ask).
 
 ## 🌐 Network
 

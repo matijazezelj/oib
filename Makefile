@@ -5,7 +5,7 @@
         uninstall uninstall-grafana uninstall-logging uninstall-metrics uninstall-telemetry uninstall-profiling uninstall-services \
         status info info-grafana info-logging info-metrics info-telemetry info-profiling info-services \
         logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
-        install-mcp uninstall-mcp logs-mcp mcp-config test-mcp \
+        install-mcp uninstall-mcp logs-mcp mcp-config test-mcp ask test-ask \
         network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling latest \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
         test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-isolation test-restricted \
@@ -112,10 +112,10 @@ help: ## Show this help message
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Acceptance Tests (delete all OIB data):$(RESET)"
-	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-restricted|test-mcp|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-restricted|test-mcp|test-ask|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
-	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(ask|open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Maintenance:$(RESET)"
 	@grep -E '^(update|update-grafana|update-logging|update-metrics|update-telemetry|update-profiling|latest|clean|migrate-tempo|rollback-tempo|migrate-grafana-volume):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -441,6 +441,11 @@ mcp-config: ## Show how to connect hib, Claude Code or Codex to the MCP endpoint
 	@echo "  A hib account with its own CLAUDE_CONFIG_DIR: run the claude mcp add line with that"
 	@echo "  CLAUDE_CONFIG_DIR set. hib asks before each MCP call."
 	@echo ""
+
+# Q is quoted for the shell here (single quotes, embedded ones escaped), never spliced raw.
+ask: ## Ask an LLM about OIB's data through hib: make ask Q="why is checkout slow?" [SINCE=1h] [MODEL=...]
+	@SINCE='$(subst ','\'',$(or $(SINCE),1h))' MODEL='$(subst ','\'',$(MODEL))' HIB='$(subst ','\'',$(or $(HIB),hib))' MCP_URL='$(MCP_URL)' \
+		scripts/ask.sh '$(subst ','\'',$(Q))'
 
 uninstall-mcp: ## Remove the MCP endpoint and its tokens
 	@echo "$(YELLOW)Removing the MCP endpoint...$(RESET)"
@@ -1414,6 +1419,9 @@ test-restricted: ## Restricted mode: no socket/host mounts, works, switches both
 
 test-mcp: ## MCP endpoint: read-only, authenticated, answers from OIB data (ISOLATED=1: in Docker-in-Docker)
 	@$(ACCEPTANCE_RUN) mcp.sh
+
+test-ask: ## make ask through hib against a staged Redis outage (local only: needs hib and a logged-in Claude)
+	@testing/acceptance/ask-hib.sh
 
 test-isolation: ## Self-test of ISOLATED=1: concurrent, interrupted and killed runs clean up
 	@testing/acceptance/isolation-selftest.sh
