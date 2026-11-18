@@ -70,7 +70,7 @@ Checks retry for up to 120 s (`VERIFY_TIMEOUT`), because data takes a few second
 7. `make restore-all STAMP=... YES=1`.
 8. **Clean recovery and no lost writes:**
    - `restore-clean-recovery`: no restored component may log corruption, repair, checksum or WAL replay errors while starting from the archive. The exception is a short, documented list of messages where a component recovers by itself from a derived file caught mid-write (`RECOVERY_SELF_HEALING` in `data.sh`). These are printed as notes, and the data checks still decide whether anything was lost.
-   - `loki-load-before-backup`: every log line Loki acknowledged before its freeze must be back. A failure lists each missing line and how long before the freeze it was acknowledged, followed by Loki's WAL-replay log.
+   - `loki-load-before-backup`: every log line Loki acknowledged before its freeze must be back. A failure lists each missing line and how long before the freeze it was acknowledged, followed by Loki's WAL-replay log. **Known issue:** this fails in about one CI run in five, with the last one or two lines acknowledged 0.1 to 0.4 s before the backup missing. It is under investigation; see the README's backup section.
    - `tempo-load-before-backup`: every trace sent more than 10 s before Tempo's freeze must open by ID. The 10 s allow for Alloy's batching.
 9. The data checks and functional checks must pass.
 
