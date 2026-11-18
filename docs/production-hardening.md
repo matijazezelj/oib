@@ -6,7 +6,7 @@ This guide covers security and reliability work required before adapting OIB to 
 
 - [ ] Set a strong Grafana admin password (there is no default)
 - [ ] Change the default PostgreSQL password if you use the shared services or demo app
-- [ ] Review the privileged host mounts (see [Host Access](#host-access))
+- [ ] Review the privileged host mounts (see [Host Access](#host-access)), or run in [restricted mode](#restricted-mode)
 - [ ] Enable authentication on services
 - [ ] Configure firewall rules
 - [ ] Set up TLS/HTTPS
@@ -173,9 +173,40 @@ Several collectors need privileged views of the host. Treat these containers as 
 | `oib-alloy-logging` | `/var/run/docker.sock:ro` | Discover containers and read their logs | Docker API access is root-equivalent; `:ro` does not limit API calls |
 | `oib-alloy-logging` | `/var/log:/var/log:ro` | Only used by the commented system-logs block in `logging/config/alloy-config.alloy` | Read access to host logs |
 | `oib-cadvisor` | `/var/run/docker.sock:ro`, `/:/rootfs:ro`, `/sys`, `/var/lib/docker`, `/dev/disk` | Container metrics | Root-equivalent (socket) and read access to the whole host filesystem |
-| `oib-alloy-metrics` | `/:/rootfs:ro`, `/proc`, `/sys` | Host filesystem metrics | Read access to the whole host filesystem |
+| `oib-alloy-metrics` | `/:/rootfs:ro`, `/proc`, `/sys` | Host filesystem metrics | Read access to the whole host filesystem; running as root with the host's `/proc`, it can also read the environment variables and files of root processes in other containers |
 
-To reduce exposure, put a Docker socket proxy that only allows read-only container endpoints in front of the socket, or disable the stacks you do not need.
+To reduce exposure, run OIB in [restricted mode](#restricted-mode), put a Docker socket proxy that only allows read-only container endpoints in front of the socket, or disable the stacks you do not need.
+
+### Restricted mode
+
+Set `OIB_MODE=restricted` in `.env` and run `make install`. The Makefile then layers each stack's `compose.restricted.yaml` over its `compose.yaml`, and the setting stays in effect for every later `make install`, `make update` and `make restart`. To switch back, remove the line (or set `OIB_MODE=standard`) and run `make install` again. Data is kept either way.
+
+In restricted mode no OIB container has:
+
+- the Docker socket;
+- a bind mount of the host's `/`, `/run`, `/var/run` or `/var/lib/docker`;
+- an added capability, privileged mode, devices, or the host's PID or network namespace.
+
+`oib-alloy-metrics` keeps read-only `/proc` and `/sys`, for host CPU, memory, disk I/O and network metrics. They show every process's name and command line on the host. In restricted mode Alloy runs as its own non-root user with all capabilities dropped. That way it cannot read other processes' environments or files through `/proc` (as root it could, for root processes in other containers).
+
+What restricted mode gives up:
+
+| Lost | Why | Instead |
+|------|-----|---------|
+| Automatic container log collection (`oib-alloy-logging` is not run) | It reads logs through the Docker socket | Push logs to Loki (`http://localhost:3100/loki/api/v1/push`) from your apps or a log shipper you run yourself |
+| Container metrics (`oib-cadvisor` is not run; the `container_*` alerts and dashboard panels stay empty) | cAdvisor needs the socket, `/`, `/var/lib/docker` and `SYS_PTRACE` | Instrument your apps, or scrape exporters you run yourself (add jobs to `metrics/config/scrape.restricted/`) |
+| Disk space per mount (`node_filesystem_*`; disk-space alerts never fire) | It needs the host's root filesystem | Monitor disk space on the host directly |
+
+Logs pushed to Loki, host metrics, traces, profiles, dashboards, alert rules and `make backup` all work. `make test-restricted` does the following, and CI runs it on every change:
+
+- checks the invariant above with `docker inspect` on every OIB container;
+- checks that Alloy cannot read another container's environment;
+- checks that the stack works, including after `make update`;
+- switches modes in both directions on a stack with data.
+
+`make health` fails if cAdvisor or Alloy (logging) is still running after you switch to restricted mode without `make install`.
+
+Restricted mode is not rootless Docker: the daemon still runs as root. Running OIB under rootless Docker or Podman is not tested yet.
 
 The root `.env` is loaded with `env_file` into Grafana, Loki, Prometheus, Tempo and Pyroscope. Every variable in it, including `GRAFANA_ADMIN_PASSWORD` and `POSTGRES_PASSWORD`, is visible through `docker inspect` on those containers. Restrict who can run `docker` on the host. Do not put unrelated secrets in `.env`.
 

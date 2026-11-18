@@ -1,0 +1,6 @@
+# cAdvisor - container metrics. Not loaded in restricted mode (OIB_MODE=restricted),
+# which mounts metrics/config/scrape.restricted/ here instead.
+scrape_configs:
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

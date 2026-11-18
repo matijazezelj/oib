@@ -7,7 +7,7 @@
         logs logs-grafana logs-logging logs-metrics logs-telemetry logs-profiling logs-services \
         network health doctor check-ports update update-grafana update-logging update-metrics update-telemetry update-profiling latest \
         clean ps validate open disk-usage version demo demo-examples demo-app demo-app-stop demo-traffic bootstrap \
-        test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-isolation \
+        test-load test-stress test-spike test-api test-backup test-upgrade test-tempo-recovery test-isolation test-restricted \
         backup backup-prometheus backup-loki backup-tempo backup-grafana backup-pyroscope \
         migrate-grafana-volume migrate-tempo rollback-tempo tempo-guard restore restore-all restore-prometheus restore-loki restore-tempo restore-grafana restore-pyroscope
 
@@ -19,13 +19,27 @@ RED := $(shell printf '\033[31m')
 RESET := $(shell printf '\033[0m')
 BOLD := $(shell printf '\033[1m')
 
-# Docker compose command - include root .env file for all stacks
-DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env
-
 # Read only endpoint values needed by Make and emit them only when they match
 # their expected grammar. Raw .env text must never be spliced into shell recipes.
 env_port = $(strip $(shell awk -F= '$$1 == "$(1)" { v=substr($$0,index($$0,"=")+1); if (v ~ /^[0-9]+$$/) print v; exit }' "$(CURDIR)/.env" 2>/dev/null))
 env_addr = $(strip $(shell awk -F= '$$1 == "$(1)" { v=substr($$0,index($$0,"=")+1); if (v ~ /^[A-Za-z0-9_.:-]+$$/) print v; exit }' "$(CURDIR)/.env" 2>/dev/null))
+
+# Deployment mode, read from .env (see .env.example):
+#   standard   - everything, including the collectors that need the Docker
+#                socket and host mounts (cAdvisor, Alloy container logs)
+#   restricted - no Docker socket, host root filesystem or added capabilities;
+#                each stack's compose.restricted.yaml is layered over compose.yaml
+OIB_MODE := $(or $(call env_addr,OIB_MODE),standard)
+ifeq ($(filter standard restricted,$(OIB_MODE)),)
+$(error OIB_MODE in .env must be standard or restricted, not '$(OIB_MODE)')
+endif
+RESTRICTED := $(filter restricted,$(OIB_MODE))
+# Evaluated by the shell in the stack directory each recipe cd's into, so stacks
+# without a compose.restricted.yaml run unchanged.
+COMPOSE_MODE_FILES := $(if $(RESTRICTED),$$(test -f compose.restricted.yaml && echo -f compose.yaml -f compose.restricted.yaml))
+
+# Docker compose command - include root .env file for all stacks
+DOCKER_COMPOSE := docker compose --env-file $(CURDIR)/.env $(COMPOSE_MODE_FILES)
 
 BIND_ADDR := $(or $(call env_addr,BIND_ADDR),127.0.0.1)
 GRAFANA_PORT := $(or $(call env_port,GRAFANA_PORT),3000)
@@ -95,7 +109,7 @@ help: ## Show this help message
 	@grep -E '^(test-load|test-stress|test-spike|test-api):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Acceptance Tests (delete all OIB data):$(RESET)"
-	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(test-backup|test-upgrade|test-tempo-recovery|test-restricted|test-isolation):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(CYAN)Utilities:$(RESET)"
 	@grep -E '^(open|disk-usage|version|demo|demo-app|demo-app-stop|demo-traffic|demo-examples|bootstrap):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-22s$(RESET) %s\n", $$1, $$2}'
@@ -504,6 +518,7 @@ uninstall-services: ## Remove shared services and volumes (PostgreSQL + Redis)
 status: ## Show status of all stacks with health indicators
 	@echo ""
 	@echo "$(BOLD)🔭 OIB Stack Status$(RESET)"
+	@echo "  Mode: $(OIB_MODE)"
 	@echo ""
 	@printf "  %-20s %-12s %s\n" "SERVICE" "STATUS" "HEALTH"
 	@echo "  ────────────────────────────────────────────────"
@@ -522,6 +537,8 @@ status: ## Show status of all stacks with health indicators
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-alloy-logging; then \
 		health=$$(curl -sf $(ALLOY_LOGGING_URL)/-/ready >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "Alloy (logging)" "running" "$$health"; \
+	elif [ -n "$(RESTRICTED)" ]; then \
+		printf "  %-20s $(YELLOW)%s$(RESET)\n" "Alloy (logging)" "not used (restricted mode)"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "Alloy (logging)" "stopped"; \
 	fi
@@ -540,6 +557,8 @@ status: ## Show status of all stacks with health indicators
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx oib-cadvisor; then \
 		health=$$(curl -sf $(CADVISOR_URL)/healthz >/dev/null 2>&1 && echo "$(GREEN)✓ healthy$(RESET)" || echo "$(YELLOW)? starting$(RESET)"); \
 		printf "  %-20s $(GREEN)%-12s$(RESET) %b\n" "cAdvisor" "running" "$$health"; \
+	elif [ -n "$(RESTRICTED)" ]; then \
+		printf "  %-20s $(YELLOW)%s$(RESET)\n" "cAdvisor" "not used (restricted mode)"; \
 	else \
 		printf "  %-20s $(RED)%-12s$(RESET)\n" "cAdvisor" "stopped"; \
 	fi
@@ -751,12 +770,20 @@ health: ## Quick health check of all services
 	echo ""; \
 	echo "$(CYAN)Logging:$(RESET)"; \
 	check_http "Loki" "oib-loki" "$(LOKI_URL)/ready"; \
-	check_http "Alloy (logging)" "oib-alloy-logging" "$(ALLOY_LOGGING_URL)/-/ready"; \
+	if [ -n "$(RESTRICTED)" ] && docker inspect oib-alloy-logging >/dev/null 2>&1; then \
+		echo "  $(RED)✗$(RESET) Alloy (logging) still exists in restricted mode; run make install to remove it"; \
+		errors=$$((errors + 1)); \
+	elif [ -n "$(RESTRICTED)" ]; then echo "  $(YELLOW)-$(RESET) Alloy (logging) is not used in restricted mode"; \
+	else check_http "Alloy (logging)" "oib-alloy-logging" "$(ALLOY_LOGGING_URL)/-/ready"; fi; \
 	echo ""; \
 	echo "$(CYAN)Metrics:$(RESET)"; \
 	check_http "Prometheus" "oib-prometheus" "$(PROMETHEUS_URL)/-/ready"; \
 	check_http "Alloy (metrics)" "oib-alloy-metrics" "$(ALLOY_METRICS_URL)/-/ready"; \
-	check_http "cAdvisor" "oib-cadvisor" "$(CADVISOR_URL)/healthz"; \
+	if [ -n "$(RESTRICTED)" ] && docker inspect oib-cadvisor >/dev/null 2>&1; then \
+		echo "  $(RED)✗$(RESET) cAdvisor still exists in restricted mode; run make install to remove it"; \
+		errors=$$((errors + 1)); \
+	elif [ -n "$(RESTRICTED)" ]; then echo "  $(YELLOW)-$(RESET) cAdvisor is not used in restricted mode"; \
+	else check_http "cAdvisor" "oib-cadvisor" "$(CADVISOR_URL)/healthz"; fi; \
 	check_http "Blackbox Exporter" "oib-blackbox-exporter" "$(BLACKBOX_URL)/health"; \
 	echo ""; \
 	echo "$(CYAN)Telemetry:$(RESET)"; \
@@ -829,6 +856,7 @@ validate: ## Validate configuration files
 	for file in \
 		logging/config/loki-config.yml \
 		metrics/config/prometheus.yml \
+		metrics/config/scrape/cadvisor.yml \
 		metrics/config/blackbox.yml \
 		metrics/config/rules/oib-alerts.yml \
 		telemetry/config/tempo.yaml \
@@ -862,6 +890,14 @@ validate: ## Validate configuration files
 			echo "  $(GREEN)✓$(RESET) $$file"; \
 		else \
 			echo "  $(RED)✗$(RESET) $$file has errors"; \
+			ERRORS=$$((ERRORS + 1)); \
+		fi; \
+	done; \
+	for file in */compose.restricted.yaml; do \
+		if $(DOCKER_COMPOSE) -f "$${file%/*}/compose.yaml" -f "$$file" config --quiet 2>/dev/null; then \
+			echo "  $(GREEN)✓$(RESET) $$file (restricted mode)"; \
+		else \
+			echo "  $(RED)✗$(RESET) $$file has errors (restricted mode)"; \
 			ERRORS=$$((ERRORS + 1)); \
 		fi; \
 	done; \
@@ -1288,6 +1324,9 @@ test-upgrade: ## Upgrade from FROM=<tag> and verify data (ISOLATED=1: in Docker-
 
 test-tempo-recovery: ## Tempo 2->3 migration failures, rerun and rollback (FROM=v1.0.0; ISOLATED=1)
 	@$(ACCEPTANCE_RUN) tempo-migration-recovery.sh $(FROM)
+
+test-restricted: ## Restricted mode: no socket/host mounts, works, switches both ways (ISOLATED=1: in Docker-in-Docker)
+	@$(ACCEPTANCE_RUN) restricted.sh
 
 test-isolation: ## Self-test of ISOLATED=1: concurrent, interrupted and killed runs clean up
 	@testing/acceptance/isolation-selftest.sh
