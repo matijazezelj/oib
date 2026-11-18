@@ -75,13 +75,17 @@ status_is() { # status_is CODE BODY [curl args]
 }
 tools_list() { mcp_post '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' >/dev/null && jq -r '.result.tools[].name' "$WORK/body"; }
 has_tools() { local t list; list=$(tools_list) || return 1; for t in "$@"; do grep -qx "$t" <<<"$list" || return 1; done; }
-# No tool whose name says it changes something.
+# No tool that can change something: one the server marks as not read-only or
+# destructive (MCP tool annotations), or whose name says it writes and that is
+# not marked read-only (alerting_manage_routing, say, only has get_* operations).
 no_write_tools() {
-  local list bad
-  list=$(tools_list) || return 1
-  bad=$(grep -E '^(create|update|delete|add|patch|put|set|upsert|import|remove|manage|alerting_manage|acknowledge|resolve)_' <<<"$list" || true)
-  printf '%s\n' "$bad" >"$WORK/write-tools.txt"
-  [ -n "$list" ] && [ -z "$bad" ]
+  mcp_post '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' >/dev/null || return 1
+  jq -e '(.result.tools | length) > 0' "$WORK/body" >/dev/null || return 1
+  jq -r '.result.tools[] | (.annotations // {}) as $a
+    | select($a.readOnlyHint == false or $a.destructiveHint == true
+             or ((.name | test("^(create|update|delete|add|patch|put|set|upsert|import|remove|manage|alerting_manage|acknowledge|resolve)_")) and $a.readOnlyHint != true))
+    | "\(.name) readOnlyHint=\($a.readOnlyHint) destructiveHint=\($a.destructiveHint)"' "$WORK/body" >"$WORK/write-tools.txt"
+  [ ! -s "$WORK/write-tools.txt" ]
 }
 # call TOOL ARGS_JSON: tools/call; the text content goes to $WORK/text
 call() {

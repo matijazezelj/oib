@@ -105,7 +105,7 @@ Installs the core stacks and the MCP endpoint (`make install-mcp`), writes a kno
    - a foreign `Host` header or a browser `Origin`: `403`;
    - the token file is `0600` in a `0700` directory.
 2. **Read-only:**
-   - the read tools are there, and no tool whose name says it writes (`create_`, `update_`, `delete_`…) is registered;
+   - the read tools are there, and no tool is registered that the server marks as writable or destructive, or whose name says it writes (`create_`, `update_`, `delete_`…) without a read-only mark;
    - the `oib-mcp` service account has the Viewer role, can read, and gets `403` when it tries to save a dashboard or create a service account.
 3. **It answers from OIB's data:** through MCP tool calls, the seeded log line comes back from Loki, `up{job="prometheus"}` from Prometheus, and the seeded trace from Tempo, both by ID and by TraceQL search.
 4. **Reinstall and uninstall:** a second `make install-mcp` keeps the client token and still answers, and `make uninstall-mcp` removes the container and the tokens.
