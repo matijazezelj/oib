@@ -170,11 +170,12 @@ check standard-containers-current    30 containers_current
 detects_standard_privileges() {
   ! restricted_invariant || return 1
   grep -q 'oib-cadvisor: Docker socket' "$WORK/violations.txt" \
-    && grep -q 'oib-cadvisor: added capability SYS_PTRACE' "$WORK/violations.txt" \
+    && grep -Eq 'oib-cadvisor: added capability (CAP_)?SYS_PTRACE' "$WORK/violations.txt" \
     && grep -q 'oib-alloy-logging: Docker socket' "$WORK/violations.txt" \
     && grep -q 'oib-alloy-metrics: host path / -> /rootfs' "$WORK/violations.txt"
 }
 check standard-invariant-check-detects-privileges 30 detects_standard_privileges
+[ "$FAILED" -gt 0 ] && [ -s "$WORK/violations.txt" ] && sed 's/^/      reported: /' "$WORK/violations.txt"
 # Control: the /proc probe works (standard mode's Alloy runs as root).
 start_proc_probe
 check standard-proc-probe-detects-root-alloy 30 alloy_reads_probe_env
