@@ -5,17 +5,13 @@
 #   - cAdvisor is removed: it needs all of those to read container metrics.
 #   - Alloy keeps read-only /proc and /sys for host CPU, memory, disk I/O and
 #     network metrics, but not the host's root filesystem, so the filesystem
-#     collector (disk space per mount) is off. It runs as its own non-root user
-#     with no capabilities: as root, the host's /proc would let it read the
-#     environment and files of other containers' root processes.
+#     collector (disk space per mount) is off. (It runs as a non-root user with
+#     no capabilities in both modes; see compose.yaml.)
 #   - Prometheus no longer scrapes cAdvisor.
 services:
   cadvisor: !reset null
 
   alloy-metrics:
-    user: "473:473"   # the image's alloy user; owns /var/lib/alloy
-    cap_drop:
-      - ALL
     volumes: !override
       - ./config/alloy-metrics.restricted.alloy:/etc/alloy/config.alloy:ro
       - /proc:/host/proc:ro
