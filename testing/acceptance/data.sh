@@ -152,13 +152,15 @@ no_files_in() { [ -z "$(ls -A "$1" 2>/dev/null)" ]; }
 write_load_start() { # FILE
   local file=$1
   : >"$file"
+  # Each line records when the write was acknowledged (after the request
+  # returned), not when it was sent: a push in flight when a component is frozen
+  # is acknowledged only after it is unpaused, and is rightly not in the archive.
   ( n=0
     while :; do
       n=$((n + 1))
-      ms=$(date +%s%3N)
-      seed_loki_line "load-$LOAD_RUN" "load $n" && echo "$ms log $n" >>"$file"
+      seed_loki_line "load-$LOAD_RUN" "load $n" && echo "$(date +%s%3N) log $n" >>"$file"
       t=$(hex 32)
-      seed_trace "load-$LOAD_RUN" "$t" && echo "$ms trace $t" >>"$file"
+      seed_trace "load-$LOAD_RUN" "$t" && echo "$(date +%s%3N) trace $t" >>"$file"
       sleep 0.2
     done ) >/dev/null 2>&1 &
   LOAD_PID=$!
@@ -181,7 +183,15 @@ load_logs_present() { # LOADFILE CUTOFF_MS
            --data-urlencode "start=$(( $(date +%s) - 3600 ))000000000" --data-urlencode 'limit=5000' \
          | jq -r '.data.result[].values[][1]' | sort -u)
   missing=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$have"))
-  [ -z "$missing" ] || { echo "$(printf '%s\n' "$missing" | wc -l) of $(printf '%s\n' "$want" | wc -l) load log lines missing" >>"$WORK/load-report.txt"; return 1; }
+  if [ -n "$missing" ]; then
+    {
+      echo "$(printf '%s\n' "$missing" | wc -l) of $(printf '%s\n' "$want" | wc -l) load log lines missing:"
+      printf '%s\n' "$missing" | while read -r _ n; do
+        awk -v n="$n" -v c="$2" '$2 == "log" && $3 == n { printf "  load %s: acknowledged %d ms before the cutoff\n", n, c - $1 }' "$1"
+      done
+    } >>"$WORK/load-report.txt"
+    return 1
+  fi
 }
 
 # All load traces sent before CUTOFF_MS must open by ID.
